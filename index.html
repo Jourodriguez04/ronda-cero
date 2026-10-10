@@ -10813,11 +10813,9 @@ function look(dx,dy){
 touch.addEventListener('pointerdown',function(e){
   if(mode!=='play')return;
   if(e.pointerType==='mouse'){
-    if(document.pointerLockElement!==touch){
-      reqLock();
-      if(!mouseFree)return;           /* 1er clic: solo atrapa el mouse */
-    }
-    if(e.button===2)adsOn=true;else firing=true;
+    /* los botones se manejan en 'mousedown' (abajo): con un boton ya apretado (apuntando)
+       el navegador NO manda otro pointerdown para el segundo boton, y no disparaba */
+    if(document.pointerLockElement!==touch)reqLock();
     return;
   }
   var left=e.clientX<innerWidth*.45;
@@ -10864,7 +10862,12 @@ touch.addEventListener('mouseleave',function(){mfX=-1;});
   var w=innerWidth,m=w*.06;
   if(mfX<m)look(-9*(1-mfX/m),0);else if(mfX>w-m)look(9*(1-(w-mfX)/m),0);
 })();
-document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch||mouseFree){if(e.button===2)adsOn=false;else firing=false;}});
+function mouseOk(){return mode==='play'&&!pauseOn&&(document.pointerLockElement===touch||mouseFree);}
+document.addEventListener('mousedown',function(e){
+  if(e.target!==touch||!mouseOk())return;   /* 1er clic sin mouse atrapado: solo lo atrapa */
+  if(e.button===2)adsOn=true;else if(e.button===0)firing=true;
+});
+document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch||mouseFree){if(e.button===2)adsOn=false;else if(e.button===0)firing=false;}});
 document.addEventListener('keydown',function(e){if(e.code==='Escape'&&mouseFree&&mode==='play'&&!pauseOn&&document.pointerLockElement!==touch&&typeof setPause==='function')setPause(true);});
 
 var fireBtn=$('fire'),fid=null,fx=0,fy=0;

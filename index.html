@@ -13260,8 +13260,8 @@ function shaftTick(dt){
 /* =====================================================
    OPCIONES: sensibilidad, FOV y volumen (enganchados desde afuera)
 ===================================================== */
-var _look0=look;
-look=function(dx,dy){var s=OPT.sens||1;_look0(dx*s,dy*s);};
+var _lookSens0=look;
+look=function(dx,dy){var s=OPT.sens||1;_lookSens0(dx*s,dy*s);};
 var _audioInit0=audioInit;
 audioInit=function(){_audioInit0();optApplyVol();};
 function optApplyVol(){try{if(master&&AC)master.gain.setTargetAtTime(.9*clamp(OPT.vol,0,1),AC.currentTime,.03);}catch(_){}}

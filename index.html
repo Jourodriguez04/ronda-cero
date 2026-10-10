@@ -7542,7 +7542,7 @@ function flashFx(){
 var aimOver=false,snap=0,snapYaw=0,snapPitch=0,prevAds=false;
 function updateAim(dt){
   aimOver=false;
-  var mouse=document.pointerLockElement===touch;
+  var mouse=document.pointerLockElement===touch||mouseFree;
   var cp=Math.cos(pitch),fx=-Math.sin(yaw)*cp,fy=Math.sin(pitch),fz=-Math.cos(yaw)*cp,best=null,ba=1e9,ey=P.fy+camH+P.y;
   for(var i=0;i<zombies.length;i++){
     var z=zombies[i];if(z.dead||z.rise>0)continue;
@@ -10813,8 +10813,11 @@ function look(dx,dy){
 touch.addEventListener('pointerdown',function(e){
   if(mode!=='play')return;
   if(e.pointerType==='mouse'){
-    if(document.pointerLockElement!==touch){try{touch.requestPointerLock();}catch(_){}}
-    else if(e.button===2)adsOn=true;else firing=true;
+    if(document.pointerLockElement!==touch){
+      reqLock();
+      if(!mouseFree)return;           /* 1er clic: solo atrapa el mouse */
+    }
+    if(e.button===2)adsOn=true;else firing=true;
     return;
   }
   var left=e.clientX<innerWidth*.45;
@@ -10835,8 +10838,34 @@ function endPtr(e){
   if(e.pointerId===lookId)lookId=null;
 }
 touch.addEventListener('pointerup',endPtr);touch.addEventListener('pointercancel',endPtr);
-document.addEventListener('mousemove',function(e){if(document.pointerLockElement===touch&&mode==='play')look(e.movementX,e.movementY);});
-document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch){if(e.button===2)adsOn=false;else firing=false;}});
+/* Modo mouse libre: si el navegador no deja atrapar el mouse (Brave/Chrome a veces lo
+   bloquea o pide permiso), igual se mira moviendo el mouse, se dispara con clic y en los
+   bordes de la pantalla gira solo. Cada clic vuelve a intentar atraparlo. */
+var mouseFree=false,mfX=-1,mfNote=false;
+function mouseFreeOn(){
+  if(coarseUI||mouseFree)return;
+  mouseFree=true;touch.style.cursor='crosshair';
+  if(!mfNote&&mode==='play'){mfNote=true;try{toast('El navegador no dejó atrapar el mouse: mira moviéndolo (en los bordes gira solo). F11 = pantalla completa');}catch(_){}}
+}
+function reqLock(){
+  try{var pr=touch.requestPointerLock();if(pr&&pr.catch)pr.catch(function(){mouseFreeOn();});}catch(_){mouseFreeOn();}
+}
+document.addEventListener('pointerlockerror',function(){mouseFreeOn();});
+document.addEventListener('pointerlockchange',function(){touch.style.cursor=document.pointerLockElement===touch?'':(mouseFree?'crosshair':'');});
+document.addEventListener('mousemove',function(e){
+  if(mode!=='play')return;
+  if(document.pointerLockElement===touch){look(e.movementX,e.movementY);return;}
+  if(mouseFree&&!pauseOn&&e.target===touch){look(e.movementX||0,e.movementY||0);mfX=e.clientX;}
+});
+touch.addEventListener('mouseleave',function(){mfX=-1;});
+(function mfEdge(){
+  requestAnimationFrame(mfEdge);
+  if(!mouseFree||mfX<0||mode!=='play'||pauseOn||document.pointerLockElement===touch)return;
+  var w=innerWidth,m=w*.06;
+  if(mfX<m)look(-9*(1-mfX/m),0);else if(mfX>w-m)look(9*(1-(w-mfX)/m),0);
+})();
+document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch||mouseFree){if(e.button===2)adsOn=false;else firing=false;}});
+document.addEventListener('keydown',function(e){if(e.code==='Escape'&&mouseFree&&mode==='play'&&!pauseOn&&document.pointerLockElement!==touch&&typeof setPause==='function')setPause(true);});
 
 var fireBtn=$('fire'),fid=null,fx=0,fy=0;
 fireBtn.addEventListener('pointerdown',function(e){

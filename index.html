@@ -4459,7 +4459,11 @@ var ROOMS=[
   {n:'Dormitorios',rs:[[23,11,33,18],[34,14,34,15]],s:'dorm',fh:3.6,ceil:7.2},
   {n:'Generador',rs:[[38,22,49,30],[41,18,43,21],[37,25,37,26],[46,31,47,33]],s:'gen',ceil:8},
   {n:'Esclusa',rs:[[25,32,28,33],[26,34,27,34]],s:'lock'},
-  {n:'Superficie',rs:[[14,35,58,35],[14,36,49,43],[14,44,58,44]],s:'moon',out:true,ceil:5.76},
+  /* Superficie: el campo grande + un anillo de 4 m que rodea el Puesto Icaro (brazo norte z34-35, brazo este x59-60, brazo sur z44-45).
+     Antes los brazos norte y sur eran callejones de 2 m que morian en x58: parecian conectar y no tenian paso.
+     OJO: entre el anillo y el Puesto SIEMPRE queda una fila solida (z36, x58, z43). Dos casillas de piso contiguas al mismo nivel
+     no llevan pared aunque sean de salas distintas: si se tocan, se entra al Puesto sin la Tarjeta. */
+  {n:'Superficie',rs:[[14,35,60,35],[14,36,49,43],[14,44,60,44],[48,34,51,34],[56,34,60,34],[48,45,60,45],[59,36,60,43]],s:'moon',out:true,ceil:5.76},
   {n:'Observatorio',rs:[[6,1,11,1],[5,2,12,2],[4,3,13,8],[5,9,12,9],[6,10,11,10]],s:'obs',ceil:6},
   {n:'Túneles',rs:[[8,12,9,17],[10,14,21,15]],s:'tun',ceil:2.8,follow:true},
   {n:'Cámara de bombas',rs:[[4,30,11,36]],s:'tun',ceil:5},
@@ -5429,7 +5433,13 @@ var papTex=cTex(128,128,function(x,w,h){
 
 /* ---------- materiales del arma ---------- */
 var metal=function(c,sh){return new THREE.MeshPhongMaterial({color:c,fog:false,depthTest:false,shininess:sh||30,specular:0x333333});};
-function wm(tex,col,sh,spec,em){return new THREE.MeshPhongMaterial({map:tex||null,color:col,shininess:sh,specular:spec,emissive:em||0,fog:false,depthTest:false});}
+/* luz de relleno del arma en mano: cada material brilla un minimo con su propio color/textura (VM_FILL),
+   para que el arma y las manos se lean en las salas oscuras en vez de quedar como una mancha negra */
+var VM_FILL=.36;
+function wm(tex,col,sh,spec,em){
+  var c=new THREE.Color(col).multiplyScalar(VM_FILL);if(em)c.add(new THREE.Color(em));
+  return new THREE.MeshPhongMaterial({map:tex||null,color:col,shininess:sh,specular:spec,emissive:c,emissiveMap:tex||null,fog:false,depthTest:false});
+}
 function wb(col){return new THREE.MeshBasicMaterial({color:col,fog:false,depthTest:false});}
 var mPap=new THREE.MeshPhongMaterial({map:papTex,color:0x8f7fa8,emissive:0xffffff,emissiveMap:papTex,emissiveIntensity:.55,shininess:30,specular:0x402858,fog:false,depthTest:false});
 var mPapTrim=wm(WT.metal,0x2c2240,30,0x3a2060,0x1c0838);
@@ -5444,7 +5454,7 @@ var mCuff=wm(WT.glove,0x3a3936,6,0x060606,0x040404),mSleeve=wm(WT.sleeve,0x737a8
 var mGrey=mGunm,mGlow=wb(0x66ff88);
 /* materiales extra (detalle) */
 function lm(tex,ei){return new THREE.MeshPhongMaterial({map:tex,color:0xffffff,shininess:12,specular:0x101010,emissive:0xffffff,emissiveMap:tex,emissiveIntensity:ei==null?.22:ei,fog:false,depthTest:false});}
-var mWear=wm(WT.metal,0x9ea4ab,34,0x444444,0x14151a),mScrew=wm(null,0x8c9298,60,0x666666,0x101012);
+var mWear=wm(WT.metal,0x7f858d,30,0x2c2c2c,0x0a0b0d),mScrew=wm(null,0x6c7279,40,0x383838,0x08080a);
 var mRubber=wm(WT.poly,0x232426,4,0x050505,0x030303),mKnurl=wm(WT.knurl,0xffffff,6,0x080808,0x080808);
 var mRibM=wm(WT.magrib,0xffffff,14,0x0c0c0c,0x060606),mVentM=wm(WT.vent,0xffffff,14,0x0c0c0c,0x060606);
 var mHaz=wm(WT.haz,0xffffff,10,0x0c0c0c,0x120e00),mOlive=wm(WT.olive,0xffffff,12,0x0c0c0c,0x0a0b06);
@@ -5510,20 +5520,80 @@ function sleevePatch(L,cam,frac){
 /* brazo: manga desde el codo hasta la muñeca */
 function sleeve(parent,ex,ey,ez,wx,wy,wz){return limb(parent,mSleeve,gCone,.046,ex,ey,ez,wx,wy,wz);}
 function cuff(parent,ex,ey,ez,wx,wy,wz){_wv1.set(wx-ex,wy-ey,wz-ez).normalize();return limb(parent,mCuff,gCyl,.03,wx-_wv1.x*.006,wy-_wv1.y*.006,wz-_wv1.z*.006,wx+_wv1.x*.03,wy+_wv1.y*.03,wz+_wv1.z*.03);}
+/* ---------- formas redondeadas para manos y armas ---------- */
+/* caja con bordes redondeados (bisel): w,h,d totales, r = radio del borde; los UV van por cara como una caja normal */
+var _rbC={};
+function rrShape(w,h,r){
+  var s=new THREE.Shape(),x=-w/2,y=-h/2;
+  s.moveTo(x+r,y);s.lineTo(x+w-r,y);s.quadraticCurveTo(x+w,y,x+w,y+r);s.lineTo(x+w,y+h-r);s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  s.lineTo(x+r,y+h);s.quadraticCurveTo(x,y+h,x,y+h-r);s.lineTo(x,y+r);s.quadraticCurveTo(x,y,x+r,y);return s;
+}
+function gRB(w,h,d,r){
+  var k=w+'_'+h+'_'+d+'_'+r;if(_rbC[k])return _rbC[k];
+  var iw=w-2*r,ih=h-2*r,rc=Math.min(r*.8,Math.min(iw,ih)/2*.98);
+  var g=new THREE.ExtrudeGeometry(rrShape(iw,ih,rc),{depth:d-2*r,bevelEnabled:true,bevelThickness:r,bevelSize:r,bevelSegments:2,curveSegments:3,steps:1});
+  g.translate(0,0,-(d-2*r)/2);
+  var p=g.attributes.position,n=g.attributes.normal,uv=g.attributes.uv,i,ax,ay,az;
+  for(i=0;i<p.count;i++){
+    ax=Math.abs(n.getX(i));ay=Math.abs(n.getY(i));az=Math.abs(n.getZ(i));
+    if(az>=ax&&az>=ay)uv.setXY(i,p.getX(i)/w+.5,p.getY(i)/h+.5);
+    else if(ax>=ay)uv.setXY(i,p.getZ(i)/d+.5,p.getY(i)/h+.5);
+    else uv.setXY(i,p.getX(i)/w+.5,p.getZ(i)/d+.5);
+  }
+  uv.needsUpdate=true;return _rbC[k]=g;
+}
+function vrb(parent,mat,w,h,d,x,y,z,r,rx){var m=vMesh(parent,gRB(w,h,d,r),mat);m.position.set(x,y,z);if(rx)m.rotation.x=rx;return m;}
+/* elipsoide */
+function ve(parent,mat,rx,ry,rz,x,y,z){var m=vMesh(parent,gSph,mat);m.scale.set(rx,ry,rz);m.position.set(x,y,z);return m;}
+/* capsula de A a B (cilindro + esferas en las puntas) = un segmento de dedo */
+function cap(parent,mat,r,ax,ay,az,bx,by,bz){limb(parent,mat,gCyl,r,ax,ay,az,bx,by,bz);vs(parent,mat,r,ax,ay,az);vs(parent,mat,r,bx,by,bz);}
+/* cuatro dedos (indice a menique) apilados en y, cada uno una capsula a lo largo de x con su nudillo */
+function fingersX(H,mat,cx,w,cy,h,z){
+  var R=[1,1,.95,.8],ov=.0024,sum=0,i,s,y,r,pr=0,len,zi;
+  for(i=0;i<4;i++)sum+=2*R[i];
+  s=(h+3*ov)/sum;y=cy+h/2;
+  for(i=0;i<4;i++){
+    r=R[i]*s;y-=(i?pr+r-ov:r);pr=r;len=w-(i===3?.007:0);zi=z+i*.0012;
+    cap(H,mat,r,cx-len/2+r,y,zi,cx+len/2-r,y,zi);
+  }
+}
+/* lo mismo pero con los dedos a lo largo de z (mano de lado) */
+function fingersZ(H,mat,cx,cy,h,cz,w){
+  var R=[1,1,.95,.8],ov=.0024,sum=0,i,s,y,r,pr=0,len;
+  for(i=0;i<4;i++)sum+=2*R[i];
+  s=(h+3*ov)/sum;y=cy+h/2;
+  for(i=0;i<4;i++){
+    r=R[i]*s;y-=(i?pr+r-ov:r);pr=r;len=w-(i===3?.008:0);
+    cap(H,mat,r,cx,y,cz-len/2+r,cx,y,cz+len/2-r);
+  }
+}
 /* guantes en pasadas para respetar el orden de dibujo: f dedos (delante), p palma, t pulgar (lado izquierdo, encima) */
 function gloveGrip(H,s,part){
-  if(part==='f')vp(H,mGloveK,.048,.066,.022,0,-.008,-.031);
-  else if(part==='p')vp(H,mGlove,.052,.072,.058,0,-.004,.008);
-  else vp(H,mGlove,.017,.018,.052,-.027*s,.04,-.01);
+  var i,x0=-.029*s,x1=-.027*s,x2=-.0265*s;
+  if(part==='f')fingersX(H,mGloveK,0,.048,-.008,.066,-.031);
+  else if(part==='p'){
+    vrb(H,mGlove,.052,.072,.058,0,-.004,.008,.0115);
+    ve(H,mGlove,.013,.026,.03,-.021*s,.01,.004);                  // monte del pulgar
+    for(i=0;i<4;i++)ve(H,mGlove,i===3?.0066:.0079,.0046,.0078,-.0187+i*.0125,.0335,-.013);   // nudillos
+  }else{
+    cap(H,mGlove,.0085,x0,.036,.0085,x1,.0395,-.008);               // pulgar: base, articulacion y punta
+    vs(H,mGlove,.0098,x1,.0395,-.008);
+    cap(H,mGlove,.0078,x1,.0395,-.008,x2,.0415,-.0295);
+    ve(H,mGloveK,.0052,.0016,.0075,x2,.0487,-.0297);               // una
+  }
 }
 function gloveUnder(H,part){
-  if(part==='p'){vp(H,mGlove,.016,.028,.052,.033,.006,.01);vp(H,mGlove,.062,.024,.078,0,-.012,0);}
-  else vp(H,mGloveK,.019,.05,.072,-.036,.012,0);
+  if(part==='p'){vrb(H,mGlove,.062,.024,.078,0,-.012,0,.009);ve(H,mGlove,.009,.015,.027,.033,.006,.01);}
+  else fingersZ(H,mGloveK,-.036,.012,.05,0,.072);
 }
 function gloveSupport(H,part){
-  if(part==='f')vp(H,mGloveK,.062,.052,.022,-.004,-.022,-.046);
-  else if(part==='p')vp(H,mGlove,.022,.07,.066,-.032,-.012,0);
-  else vp(H,mGlove,.016,.016,.05,-.031,.033,-.032);
+  if(part==='f')fingersX(H,mGloveK,-.004,.062,-.022,.052,-.046);
+  else if(part==='p'){vrb(H,mGlove,.022,.07,.066,-.032,-.012,0,.0075);ve(H,mGlove,.0095,.02,.025,-.036,.004,.012);}
+  else{
+    cap(H,mGlove,.0082,-.031,.0325,-.016,-.031,.0345,-.049);
+    vs(H,mGlove,.0092,-.031,.0338,-.0295);
+    ve(H,mGloveK,.005,.0015,.0072,-.031,.042,-.0485);
+  }
 }
 function addFlash(g,x,y,z,s,col){
   var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:flashTex,blending:THREE.AdditiveBlending,depthTest:false,transparent:true,fog:false}));
@@ -5558,35 +5628,54 @@ var gunModels={};
   /* ===== PISTOLA (M1911) ===== */
   begin(-.03,.03,.03,.2,-.16);A.rp=[.1,.12,-.7];A.ro=[-.04,.13,.0];
   leftArm(-.24,-.36,.3,-.045,-.09,.0,.32);rightArm(.13,-.33,.42,.0,-.085,.08);
-  magGroup(0,-.058,.03,-.22);vp(M,mGunm,.025,.1,.037,0,-.008,0);vp(M,mDark,.032,.01,.046,0,-.058,.003);
-  vp(g,mBlued,.03,.1,.048,0,-.058,.03,-.22);vp(g,mWoodV,.035,.074,.038,0,-.058,.03,-.22); // empuñadura + cachas
-  var GR=vg(g,0,-.058,.03,-.22);                                  // detalle de las cachas: medallon, tornillos, anilla
-  vx(GR,mBrass,.0105,.003,.0182,.01,0);vx(GR,mDark,.0062,.0032,.0183,.01,0);scr(GR,.0182,.029,.001);scr(GR,.0182,-.026,.001);
-  vp(GR,mWear,.0016,.074,.002,.0178,0,-.0185);                    // borde gastado de la cacha
-  vp(GR,mBlued,.012,.008,.014,0,-.042,.014);var lr=vr(GR,mScrew,.0125,0,-.052,.016);lr.rotation.y=Math.PI/2; // anilla de correa
-  vp(g,mBlued,.008,.03,.006,0,-.027,-.065);vp(g,mBlued,.009,.005,.05,0,-.041,-.04);vp(g,mDark,.006,.02,.006,0,-.025,-.03); // guardamonte + gatillo
-  HR=vg(g,0,-.05,.03,-.22);HL=vg(A.LA,0,-.05,.03,-.22);
+  magGroup(0,-.058,.03,-.3);
+  vrb(M,mGunm,.0235,.102,.034,0,-.008,0,.003);                       // cargador (cuerpo)
+  for(var mi=0;mi<5;mi++)vx(M,mDark,.0032,.002,.0118,-.036+mi*.0135,0); // orificios de control
+  vrb(M,mDark,.031,.009,.044,0,-.0585,.003,.0025);                    // base del cargador
+  vp(M,mWear,.0012,.0016,.04,.0126,-.0545,.003);
+  var GR=vg(g,0,-.058,.03,-.3);                                      // puño: marco, cachas y detalles (a 17 grados)
+  vrb(GR,mBlued,.0275,.098,.04,0,0,-.002,.004);                        // marco del puño
+  vy(GR,mBlued,.01375,.094,0,-.002,.0122);                            // trasera arqueada (caja del muelle)
+  vrb(GR,mWoodV,.0348,.07,.034,0,-.004,-.0015,.0035);                  // cacha de madera
+  vx(GR,mBrass,.0092,.0026,.0176,-.004,-.0015);vx(GR,mDark,.0055,.0028,.0177,-.004,-.0015); // medallon
+  for(var di=0;di<8;di++){                                           // rombos de cuadricula en el borde
+    var dy=-.0335+di*.0085,dd=vp(GR,mDark,.0012,.0042,.0042,.0176,dy,-.0125,Math.PI/4);dd=vp(GR,mDark,.0012,.0042,.0042,.0176,dy,.0095,Math.PI/4);
+  }
+  scr(GR,.0177,.0275,-.0015);scr(GR,.0177,-.0355,-.0015);
+  vp(GR,mWear,.0016,.066,.002,.0173,-.004,-.0179);                    // borde gastado de la cacha
+  vp(GR,mBlued,.01,.007,.012,0,-.046,.022);var lr=vr(GR,mScrew,.0105,0,-.0535,.0235);lr.rotation.y=Math.PI/2; // anilla de correa
+  var tg=vr(g,mBlued,1,0,-.029,-.0425);tg.rotation.y=Math.PI/2;tg.scale.set(.022,.0155,.024); // guardamonte redondeado
+  vrb(g,mDark,.0055,.021,.0065,0,-.0245,-.0335,.0018,-.2);              // gatillo
+  vp(g,mDark,.004,.007,.026,-.0148,.004,-.03);                         // retén de corredera (lado izquierdo)
+  vp(g,mDark,.0035,.009,.024,-.0152,.0045,.006);vp(g,mDark,.0035,.003,.011,-.0152,.01,.0155); // seguro de aleta (lado izquierdo)
+  HR=vg(g,0,-.05,.03,-.3);HL=vg(A.LA,0,-.05,.03,-.3);
   gloveGrip(HR,1,'f');gloveSupport(HL,'f');gloveGrip(HR,1,'p');gloveSupport(HL,'p');cuffR();cuffL();
-  vp(g,mBlued,.031,.024,.17,0,-.003,-.07);                       // armazon
-  plate(g,mLabP,.0105,.062,.01575,-.006,-.1);                     // pegatina de inventario
-  scr(g,.0158,-.006,-.145);scr(g,.0158,-.011,.002);vx(g,mDark,.0052,.004,.0166,-.0125,-.014);vx(g,mWear,.0034,.002,.0182,-.0125,-.014); // tornillos + boton del cargador
-  vp(g,mWear,.0012,.0016,.17,.0156,.0086,-.07);                   // borde gastado
-  vp(g,mDark,.004,.007,.026,-.0175,.004,-.03);                   // reten de corredera
+  vrb(g,mBlued,.0275,.026,.084,0,-.003,-.02,.003);                      // armazon: parte trasera
+  vrb(g,mBlued,.0265,.019,.1,0,.0005,-.11,.0025);                       // guardapolvo
+  vz(g,mBlued,.0065,.1,0,-.0075,-.11).scale.x=.0128;                   // redondeo inferior del guardapolvo
+  plate(g,mLabP,.0105,.062,.0136,.0005,-.108);                         // pegatina de inventario
+  scr(g,.0142,-.006,-.058);scr(g,.0142,-.011,.002);vx(g,mDark,.0052,.004,.0148,-.0125,-.014);vx(g,mWear,.0034,.002,.0159,-.0125,-.014); // tornillos + boton del cargador
+  vp(g,mWear,.0012,.0016,.17,.0139,.0086,-.068);                       // borde gastado
   gloveGrip(HR,1,'t');gloveSupport(HL,'t');
-  vp(g,mBlued,.026,.01,.032,0,.0,.06);                           // cola de castor
-  A.HM=vg(g,0,.02,.042,.55);vp(A.HM,mDark,.009,.019,.008,0,.009,.003); // martillo
-  S=vg(g,0,0,0);A.S=S;                                           // corredera (retrocede al disparar)
-  vz(S,mDark,.011,.012,0,.022,-.178);
-  vp(S,mGunm,.034,.034,.21,0,.026,-.07);vp(S,mDark,.0355,.026,.036,0,.026,.012);
-  vp(S,mDark,.006,.009,.012,0,.0475,-.16);vp(S,mDotO,.0036,.0036,.002,0,.0485,-.1535);
-  for(var si2=0;si2<6;si2++)vp(S,mDark,.0012,.022,.0028,.0182,.026,-.004+si2*.0053);   // estrias traseras
-  for(var si3=0;si3<3;si3++)vp(S,mDark,.0012,.022,.0028,.0176,.026,-.157+si3*.006);    // estrias delanteras
-  vp(S,mBlack,.0014,.012,.05,.0175,.036,-.062);vp(S,mBrass,.002,.005,.014,.0178,.036,-.054); // ventana de expulsion + casquillo
-  plate(S,mEngP,.012,.064,.0177,.0145,-.108);                     // grabado
-  vp(S,mWear,.0026,.0024,.205,.0152,.0434,-.07);vp(S,mWear,.0026,.0024,.205,.0152,.0086,-.07);vp(S,mWear,.0036,.003,.036,.0165,.0436,.012); // bordes gastados
-  vz(S,mWear,.0078,.003,0,.022,-.1795);vz(S,mBlack,.0052,.003,0,.022,-.1812);                // buje + boca del cañon
-  vp(S,mDark,.011,.009,.01,-.0095,.0475,.028);vp(S,mDark,.011,.009,.01,.0095,.0475,.028);
-  vp(S,mDotG,.003,.003,.002,-.0095,.0485,.0335);vp(S,mDotG,.003,.003,.002,.0095,.0485,.0335);
+  vrb(g,mBlued,.0245,.0062,.02,0,.0062,.0305,.0018,.3);vrb(g,mBlued,.024,.0066,.015,0,.0022,.0425,.002,.75); // cola de castor (curva)
+  S=vg(g,0,0,0);A.S=S;var SS=S;                                      // corredera (retrocede al disparar)
+  vrb(S,mGunm,.031,.034,.21,0,.026,-.07,.0045);                         // cuerpo con borde y filo superior redondeados
+  for(var si2=0;si2<7;si2++)vp(S,mDark,.0012,.021,.0026,.0158,.026,.0035+si2*.0044);   // estrias traseras
+  for(var si3=0;si3<3;si3++)vp(S,mDark,.0012,.021,.0026,.0158,.026,-.158+si3*.0055);   // estrias delanteras
+  vp(S,mBlack,.0014,.011,.05,.0158,.0325,-.064);vp(S,mBrass,.002,.0045,.014,.0161,.0325,-.054); // ventana de expulsion + casquillo
+  plate(S,mEngP,.012,.064,.0161,.0205,-.108);                          // grabado
+  vp(S,mWear,.0026,.0024,.205,.0136,.0425,-.07);                       // filo gastado
+  vp(S,mBlack,.014,.014,.0016,0,.0245,.0357);vp(S,mBlack,.003,.003,.0016,0,.0365,.0357); // ventana del martillo + placa del percutor
+  vrb(S,mDark,.0098,.0086,.0095,-.0072,.0477,.0265,.0014);vrb(S,mDark,.0098,.0086,.0095,.0072,.0477,.0265,.0014); // alza (dos postes con muesca)
+  vp(S,mDark,.0050,.0042,.0095,0,.0452,.0265);
+  vp(S,mDotG,.0034,.0034,.0015,-.0072,.0482,.0319);vp(S,mDotG,.0034,.0034,.0015,.0072,.0482,.0319);
+  vrb(S,mDark,.011,.0052,.02,0,.0456,-.16,.0014);vrb(S,mDark,.0055,.0078,.011,0,.0482,-.1575,.0012); // punto de mira: base y aleta
+  vp(S,mDotO,.0036,.0036,.0015,0,.0495,-.1514);
+  vz(S,mGunm,.0102,.006,0,.022,-.1775);vz(S,mGunm,.0108,.0016,0,.022,-.1747); // buje del cañon
+  vz(S,mBlued,.0072,.012,0,.022,-.1845);vz(S,mWear,.0076,.0016,0,.022,-.1898);vz(S,mBlack,.0046,.0016,0,.022,-.1904); // cañon que asoma + boca
+  A.HM=vg(g,0,.02,.042,.55);                                          // martillo con espuela de anillo (se dibuja sobre la corredera)
+  vrb(A.HM,mBlued,.0085,.014,.006,0,.007,0,.0018);vx(A.HM,mBlued,.0068,.0095,0,.0165,.0025);vx(A.HM,mDark,.0028,.0097,0,.0166,.0025);
+  A.HM.updateMatrixWorld=function(f){this.visible=SS.position.z<.0045;THREE.Object3D.prototype.updateMatrixWorld.call(this,f);};
   magAnim(A,new THREE.Vector3(.03,-.035,.0),new THREE.Vector3(-.08,-.3,.12));
   addFlash(g,0,.022,-.2,.26);setAds(g,.052,.028,.25);gunModels.pistol=g;
 
@@ -8766,15 +8855,16 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
   [[-24.4,19.6,.9],[-24.6,33,1.0],[-10,34.8,.8],[6,34.9,.9],[29,34.8,1.0],[44.6,31,1.0],[-24.8,26.5,.7]].forEach(function(r){if(clearSp(r[0],r[1],3.2))rock(r[0],r[1],r[2],.8,undefined,true);});
   /* grandes rocas al pie de los bordes del mapa (rompen las paredes rectas) */
   function edgeRock(x,z,nx,nz){var sz=sR(1.8,2.9);if(!clearSp(x+nx*1.5,z+nz*1.5,3.4))return;rock(x-nx*sz*.85,z-nz*sz*.85,sz,sR(.7,1.1),(sr()*3)|0);}
-  for(var bxs=X0+2;bxs<64;bxs+=sR(3.5,5.5)){if((bxs>-27&&bxs<-14)||(bxs>8&&bxs<20)||(bxs>-2&&bxs<2))continue;edgeRock(bxs,Z1,0,-1);}
+  for(var bxs=X0+2;bxs<64;bxs+=sR(3.5,5.5)){if((bxs>-27&&bxs<-14)||(bxs>8&&bxs<20)||(bxs>-2&&bxs<2))continue;edgeRock(bxs,bxs>=42?Z1+2:Z1,0,-1);}   /* desde x=42 el anillo de Icaro ocupa una fila mas al sur */
   for(var bz=Z0+3;bz<Z1-1;bz+=sR(3.5,5)){edgeRock(X0,bz,1,0);if(bz>18&&bz<34&&(bz<22||bz>30))edgeRock(46,bz,-1,0);}
   /* revestimiento de la base sobre el muro norte (a ambos lados de la esclusa y de la puerta del generador) */
-  [[-18,-3],[3,18],[27,37.6],[42.4,49.8]].forEach(function(s){
-    var cx=(s[0]+s[1])/2,w=s[1]-s[0];
-    put(mClad,GPL,cx,2.88,Z0+.03,w,5.76,1,0,0,0,3.6);
-    bx(mSteelD,cx,5.6,Z0+.25,w,.32,.5);bx(mGold,cx,4.9,Z0+.06,w,.4,.04);
-    for(var px=s[0]+.15;px<=s[1];px+=2.2)bx(mSteelD,px,2.8,Z0+.1,.25,5.6,.18);
-    bx(mTrimD,cx,.15,Z0+.08,w,.3,.12);
+  /* el ultimo tramo (x 42..50) va 2 m mas al norte: ahi la Superficie se ensancho para el anillo de Icaro */
+  [[-18,-3],[3,18],[27,37.6],[42.2,49.9,-2]].forEach(function(s){
+    var cx=(s[0]+s[1])/2,w=s[1]-s[0],zn=Z0+(s[2]||0);
+    put(mClad,GPL,cx,2.88,zn+.03,w,5.76,1,0,0,0,3.6);
+    bx(mSteelD,cx,5.6,zn+.25,w,.32,.5);bx(mGold,cx,4.9,zn+.06,w,.4,.04);
+    for(var px=s[0]+.15;px<=s[1];px+=2.2)bx(mSteelD,px,2.8,zn+.1,.25,5.6,.18);
+    bx(mTrimD,cx,.15,zn+.08,w,.3,.12);
   });
   /* esclusa: portico de la boca (x -2..2) con letrero de oxigeno */
   [-2.12,2.12].forEach(function(x){bx(mSteelD,x,2.2,Z0+.15,.3,4.4,.3);bx(mHaz,x,1.0,Z0+.32,.24,1.8,.01,0,.5);});
@@ -8979,7 +9069,7 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
 (function(){
   curRI=11;
   var X0=50,X1=58,Z0=-18,Z1=14,i,k;
-  var RW={a0:.9,a1:1.3,p1:.35};rockWall(X0+.1,Z0+.5,X0+.1,Z1+2,1,0,null,5,8.5,RW);rockWall(X1-.1,Z0+.5,X1-.1,Z1+2,-1,0,null,5,8.5,RW);
+  var RW={a0:.9,a1:1.3,p1:.35};rockWall(X0+.1,Z0+.5,X0+.1,Z1,1,0,null,5,8.5,RW);rockWall(X1-.1,Z0+.5,X1-.1,Z1,-1,0,null,5,8.5,RW);
   for(i=0;i<46;i++){var x=sR(X0+.8,X1-.8),z=sR(Z0+.5,Z1-.5);if(!clearSp(x,z,2.6))continue;rock(x,z,sR(.12,.42),sR(.5,.9));}
   /* eje del rastro: serpentea por el pasillo (siempre dentro de x 52.3..55.7) */
   function xc(z){return 54+1.25*Math.sin((z+18)*.2)+.5*Math.sin((z+18)*.47+1);}
@@ -10992,6 +11082,11 @@ function objectiveText(){
   var anyOpen=false,i;
   for(i=0;i<doors.length;i++)if(!doors[i].key&&doors[i].open)anyOpen=true;
   if(!anyOpen)return 'Gana puntos y abre una puerta';
+  /* con la Tarjeta en la mano (o el Puesto ya abierto) eso va primero: es lo unico que se puede perder de vista */
+  var kd0=null;for(i=0;i<doors.length;i++)if(doors[i].key==='coloso')kd0=doors[i];
+  if(kd0&&!kd0.open&&typeof hasCard!=='undefined'&&hasCard)
+    return (doorOpenTo(4)||doorOpenTo(5)||doorOpenTo(10))?'Abre el Puesto Ícaro con la Tarjeta del Coloso':'Sal a la Superficie y abre el Puesto Ícaro con la Tarjeta del Coloso';
+  if(kd0&&kd0.open&&typeof eclipseTaken!=='undefined'&&!eclipseTaken&&WDEF.eclipse&&gunModels.eclipse)return 'Toma el Cañón Eclipse en la bóveda del Puesto Ícaro';
   if(!power)return doorOpenTo(3)?'Activa la energía en el Generador':'Abre el camino al Generador y activa la energía';
   if(perkOwn.indexOf(true)<0)return 'Compra una perk';
   var pap=false;for(i=0;i<slots.length;i++)if(slots[i]&&slots[i].pap)pap=true;
@@ -11193,7 +11288,7 @@ function netPlayers(){if(!NET.on)return 1;var n=1;for(var k in NET.av)if(NET.av[
 
 /* ---------- menu: entrar a sala, lista y empezar ---------- */
 /* version del juego: va en la presencia para avisar en la sala si alguien tiene una vieja en cache */
-var RC_VER=14;
+var RC_VER=15;
 (function(){try{var k=document.querySelector('#menu .kick');if(k)k.textContent=k.textContent+' · v'+RC_VER;}catch(_){}})();
 $('cjoin').addEventListener('click',function(){
   audioInit();
@@ -14554,9 +14649,16 @@ var KNF={on:false,t:0,hit:false,lunge:0,ldx:0,ldz:0,fz:null,g:null};
       wpkBusy=.45;reloading=0;adsOn=false;swAnim=Math.max(swAnim,.9);
       var T=findTarget(2.1);
       if(T&&T.d>1.2){KNF.lunge=.12;KNF.ldx=(T.z.x-P.x)/T.d;KNF.ldz=(T.z.z-P.z)/T.d;}
-      sfxKnife('swish');
+      sfxKnife('swish');wpkNetFx('k','1');
     },
     freeze:function(u){KNF.fz=u;if(u==null)KG.visible=KNF.on;}        // depuracion (capturas): congela el tajo en la fraccion u (0..1)
+  };
+
+  /* cooperativo: los demas ven el golpe de brazos del avatar y oyen el silbido si estan cerca (el dano ya viaja aparte) */
+  WXNET.k=function(s,peer){
+    var a=NET.av[peer];if(!a)return;a.kick=2.5;
+    if(!AC||!gate(1))return;var b=pbus(a.x,a.z,14,.5,.2);if(!b)return;
+    nz(AC.currentTime+.02,.2,700,3200,.34,'bandpass',{q:1.3,att:.07,bus:b});
   };
 
   WPK_TICK.push(function(dt){
@@ -15182,12 +15284,59 @@ function activeAll(){
 }
 /* los puntos de salida de afuera se asignan a su sala real (Superficie, Zona Norte o Rastro) */
 function spawnRoom(s){return s.out?roomAt(s.sx,s.sz):s.room;}
+/* Apariciones por recorrido: ?cxSpawns=0 conserva la seleccion de v14.
+   Distancias en metros; el minimo nunca se relaja, tampoco en el respaldo. */
+var cxSpawns=true,cxSpawnMin=6,cxSpawnMax=32;
+try{cxSpawns=new URLSearchParams(location.search).get('cxSpawns')!=='0';}catch(cxSpawnUrlError){}
+function cxPickSpawn(c){
+  if(NET.on&&!NET.host)return null;
+  var tg=netTargets(),fields=[],active=[],i,j;
+  for(i=0;i<tg.length;i++){
+    var t=tg[i],tx=cellOf(t.x,OX),tz=cellOf(t.z,OZ),fd=t.me?FD:t.fd;
+    var room=roomAt(t.x,t.z);
+    if(room>=0){var rooms=activeRooms(room);for(j=0;j<rooms.length;j++)if(rooms[j])active[j]=true;}
+    var f=t.me?null:NET.flows[t.peer];
+    /* Las puertas invalidan las coordenadas del campo; no usarlo hasta refrescarse.
+       netTargets reutiliza/refresca los campos remotos que ya usa el bucle. */
+    var fresh=t.me?(flowCx===tx&&flowCz===tz):(f&&f.cx===tx&&f.cz===tz);
+    fields.push(fresh&&fd&&inGrid(tx,tz)&&fd[idx(tx,tz)]===0?fd:null);
+  }
+  var near=[],safe=[],best=Infinity,min2=cxSpawnMin*cxSpawnMin;
+  for(i=0;i<c.length;i++){
+    var s=c[i],ex=s.sx,ez=s.sz;
+    if(!active[spawnRoom(s)])continue;
+    /* Medir ventanas desde el lado interior, no desde el muro/barricada. */
+    if(!s.out&&!s.vent){ex=s.x+s.nx*1.2;ez=s.z+s.nz*1.2;}
+    var sx=cellOf(ex,OX),sz=cellOf(ez,OZ);
+    if(!inGrid(sx,sz)||!NAV[idx(sx,sz)])continue;
+    var k=idx(sx,sz),distance=Infinity,tooClose=false;
+    for(j=0;j<tg.length;j++){
+      var target=tg[j],dx=s.sx-target.x,dz=s.sz-target.z;
+      var ix=ex-target.x,iz=ez-target.z;
+      /* Proteger a TODOS los vivos, incluso si su campo aun no es valido.
+         Tanto la salida fisica como el punto interior deben ser seguros. */
+      if(dx*dx+dz*dz<=min2||ix*ix+iz*iz<=min2){tooClose=true;break;}
+      var value=fields[j]?fields[j][k]:-1;
+      if(value>=0)distance=Math.min(distance,value*TS);
+    }
+    if(tooClose||distance===Infinity||distance<cxSpawnMin)continue;
+    safe.push({s:s,d:distance});best=Math.min(best,distance);
+    if(distance<=cxSpawnMax)near.push(s);
+  }
+  if(!near.length){
+    /* Si no hay nada dentro del tope, usar solo las salidas seguras mas cercanas.
+       Si no hay ninguna segura/alcanzable, el bucle vuelve a intentar en .5 s. */
+    for(i=0;i<safe.length;i++)if(safe[i].d<=best+TS*2)near.push(safe[i].s);
+  }
+  return near.length?near[(Math.random()*near.length)|0]:null;
+}
 function pickSpawn(){
   var act=activeAll(),c=[],i;
   for(i=0;i<windows.length;i++)if(act[windows[i].room])c.push(windows[i]);
   for(i=0;i<outSpawns.length;i++)if(act[spawnRoom(outSpawns[i])])c.push(outSpawns[i]);
   for(i=0;i<ventSpawns.length;i++)if(act[ventSpawns[i].room])c.push(ventSpawns[i]);
   if(!c.length)return null;
+  if(cxSpawns)return cxPickSpawn(c);
   var far=c.filter(function(s){return Math.hypot(s.sx-P.x,s.sz-P.z)>6;}),arr=far.length?far:c;
   return arr[(Math.random()*arr.length)|0];
 }

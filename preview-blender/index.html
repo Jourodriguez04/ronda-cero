@@ -13678,6 +13678,58 @@ var ROOM3D_DEF=[{ri:0,base:'../rooms/hangar',label:'Hangar'},{ri:1,base:'../room
   });
 })();
 /* =====================================================
+   MATERIALES DEL KIT EN LAS SALAS SIN MODELO (integrador)
+   Las 11 salas procedurales usaban dos texturas de lienzo de 128 px tenidas por color. Aqui se les ponen las mismas
+   texturas que usan Hangar y Laboratorio (rooms/tex/*: pintura con desgaste, chapa, oxido, azulejo, linoleo, losa),
+   con su mapa de relieve, para que las transiciones entre salas no cambien de tecnica a la vista.
+   Paleta: carbon / oliva / acero; el color de cada sala va en el tinte. ?kit=0 lo apaga (quedan las de lienzo).
+   Si las imagenes no cargan (sin red, abriendo el archivo suelto, en node) no pasa nada.
+===================================================== */
+var KIT={on:true,px:512,tex:{},
+  /* estilo de sala -> [textura, tinte] para piso (f), pared (w) y techo (c) */
+  sty:{
+    dorm:{f:['lino',0xa39d88],w:['paint',0xa9a48c],c:['paint',0x5c5a50]},
+    gen:{f:['plate',0x9c9e9a],w:['rust',0xb0b1aa],c:['plate',0x54575a]},
+    lock:{f:['plate',0xa2a29c],w:['paint',0xa2a79e],c:['paint',0x595b57]},
+    obs:{f:['floor',0x9099a8],w:['paint',0x8793a6],c:['paint',0x4b5361]},
+    tun:{f:['floor',0x7c746c],w:['rust',0x978a7e],c:['rust',0x4b4541]},
+    med:{f:['lino',0xb8c3bb],w:['tile',0xc0ccc4],c:['paint',0x6e7973]},
+    puesto:{f:['plate',0x7e7a92],w:['paint',0x807b94],c:['paint',0x48445b]}
+  }
+};
+(function(){
+  if(typeof THREE==='undefined'||typeof window==='undefined'||typeof Image==='undefined'||typeof STY==='undefined')return;
+  try{if(new URLSearchParams(location.search).get('kit')==='0'){KIT.on=false;return;}}catch(_){}
+  var aniso=1;try{aniso=Math.min(4,renderer.capabilities.getMaxAnisotropy());}catch(_){}
+  /* cada imagen se reduce a KIT.px (memoria de video: 1024 -> 512 es la cuarta parte) y se comparte entre todas las salas */
+  function load(name){
+    if(KIT.tex[name])return KIT.tex[name];
+    return KIT.tex[name]=new Promise(function(ok){
+      var im=new Image();
+      im.onload=function(){
+        try{
+          var c=document.createElement('canvas');c.width=c.height=KIT.px;c.getContext('2d').drawImage(im,0,0,KIT.px,KIT.px);
+          var t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=aniso;ok(t);
+        }catch(e){ok(null);}
+      };
+      im.onerror=function(){ok(null);};
+      im.src='rooms/tex/'+name+'.jpg';
+    });
+  }
+  function apply(m,def){
+    if(!m||!def)return;
+    Promise.all([load(def[0]+'_c'),load(def[0]+'_n')]).then(function(r){
+      if(!r[0])return;
+      m.map=r[0];m.color.setHex(def[1]);m.bumpMap=null;
+      if(r[1]){m.normalMap=r[1];m.normalScale=new THREE.Vector2(.7,.7);}
+      m.needsUpdate=true;
+    });
+  }
+  var all=[];
+  for(var k in KIT.sty){var S=STY[k],D=KIT.sty[k];if(!S)continue;apply(S.f,D.f);apply(S.w,D.w);apply(S.c,D.c);all.push(load(D.f[0]+'_c'));}
+  if(window.ASSETS&&typeof ASSETS.track==='function'){try{ASSETS.track(Promise.all(all),'Materiales');}catch(_){}}
+})();
+/* =====================================================
    PAQUETE DE ARMAS — nucleo comun (del integrador; los modulos a_w_*.js cuelgan de aqui)
    WX[tipo]   = manejadores por arma o equipo: {use(), fire(w,mp,ray,wd,hits), tp(g,M,pap), give()}
    WXSND[n]   = sonido de disparo para WDEF[tipo].snd === n: function(t){...}
@@ -14875,7 +14927,7 @@ WX.revolver={tp:function(g,M,pap){
 ===================================================== */
 var VMGLB={pistol:'models/vm_m1911.glb'};
 var VMG={on:false,ok:{},env:null,fill:.25};
-var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
+var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.38,'Glove reinforcement leather':.38,'Waxed glove stitching':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
 (function(){
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
   try{VMG.on=new URLSearchParams(location.search).get('vm')!=='0';}catch(_){}
@@ -14898,10 +14950,11 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   function vmMat(m){
     if(m.userData.vmg)return m;m.userData.vmg=true;
     m.fog=false;m.depthTest=true;m.depthWrite=true;
-    /* el juego trabaja en color de pantalla (sin conversion de gamma): las texturas van tal cual */
-    ['map','emissiveMap'].forEach(function(k){if(m[k]){m[k].encoding=THREE.LinearEncoding;m[k].needsUpdate=true;}});
+    /* color base con textura: se decodifica de sRGB (como hace glTF), igual que los colores sin textura que llegan en lineal.
+       Mostrarla sin decodificar la dejaba palida bajo las luces del juego. */
+    if(m.map){m.map.encoding=THREE.sRGBEncoding;m.map.needsUpdate=true;}
     if(m.isMeshStandardMaterial){
-      var e=envMap();if(e){m.envMap=e;m.envMapIntensity=.25;}
+      var e=envMap();if(e){m.envMap=e;m.envMapIntensity=.45;}
       /* luz de relleno: un minimo de brillo propio, igual que las armas procedurales (VM_FILL) */
       /* guantes, traje y puno: sus colores vienen muy oscuros y en el Hangar quedaban casi negros (no se juzgaba la forma).
          Un minimo de brillo en su PROPIO tono (sin blanquear); el arma y lo demas no cambian. */
@@ -14910,6 +14963,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
          lea la forma sin volverse claros (bajo la luz roja de la base, un guante claro parece piel). */
       var hk=VM_HAND[m.name];
       if(hk&&!m.map){var c0=m.color.clone();m.color.lerp(c0.convertLinearToSRGB(),hk);}
+      else if(hk)m.color.multiplyScalar(1+hk*3.3);   /* con textura: mismo empuje, como multiplicador */
       if(!m.emissiveMap&&m.emissive&&m.emissive.getHex()===0){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(hk?.1:VMG.fill);if(m.map)m.emissiveMap=m.map;}
     }
     m.onBeforeCompile=function(sh){sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');};

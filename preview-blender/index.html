@@ -14872,8 +14872,8 @@ WX.revolver={tp:function(g,M,pap){
    El juego sigue animando por codigo: estos nodos se cuelgan de los grupos que ya mueve animGun (A.S, A.M, A.LA).
 ===================================================== */
 var VMGLB={pistol:'models/vm_m1911.glb'};
-var VMG={on:false,ok:{},env:null,fill:.2};
-var VM_HANDFILL={'Graphite leather glove':.3,'Olive flight suit':.27,'Wrist cuff':.34};   /* relleno por nombre de material del GLB */
+var VMG={on:false,ok:{},env:null,fill:.25};
+var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
 (function(){
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
   try{VMG.on=new URLSearchParams(location.search).get('vm')!=='0';}catch(_){}
@@ -14899,12 +14899,16 @@ var VM_HANDFILL={'Graphite leather glove':.3,'Olive flight suit':.27,'Wrist cuff
     /* el juego trabaja en color de pantalla (sin conversion de gamma): las texturas van tal cual */
     ['map','emissiveMap'].forEach(function(k){if(m[k]){m[k].encoding=THREE.LinearEncoding;m[k].needsUpdate=true;}});
     if(m.isMeshStandardMaterial){
-      var e=envMap();if(e){m.envMap=e;m.envMapIntensity=.9;}
+      var e=envMap();if(e){m.envMap=e;m.envMapIntensity=.25;}
       /* luz de relleno: un minimo de brillo propio, igual que las armas procedurales (VM_FILL) */
       /* guantes, traje y puno: sus colores vienen muy oscuros y en el Hangar quedaban casi negros (no se juzgaba la forma).
          Un minimo de brillo en su PROPIO tono (sin blanquear); el arma y lo demas no cambian. */
-      if(VM_HANDFILL[m.name]){m.emissive.copy(m.color).convertLinearToSRGB().multiplyScalar(VM_HANDFILL[m.name]);}
-      else if(!m.emissiveMap&&m.emissive&&m.emissive.getHex()===0){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(VMG.fill);if(m.map)m.emissiveMap=m.map;}
+      /* Calibrado en el Hangar 3D real (no en el procedural, que es mucho mas oscuro): el arma se queda con sus colores tal cual
+         (acero pavonado oscuro) y un relleno bajo; guantes, traje y puno suben un poco hacia su tono de pantalla para que se
+         lea la forma sin volverse claros (bajo la luz roja de la base, un guante claro parece piel). */
+      var hk=VM_HAND[m.name];
+      if(hk&&!m.map){var c0=m.color.clone();m.color.lerp(c0.convertLinearToSRGB(),hk);}
+      if(!m.emissiveMap&&m.emissive&&m.emissive.getHex()===0){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(hk?.1:VMG.fill);if(m.map)m.emissiveMap=m.map;}
     }
     m.onBeforeCompile=function(sh){sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');};
     m.customProgramCacheKey=function(){return 'vmg';};

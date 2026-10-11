@@ -7,7 +7,7 @@
 </head>
 <body style="margin:0">
 <meta charset="utf-8">
-<title>Ronda Cero — piloto visual (Blender)</title>
+<title>Ronda Cero — candidata visual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Special+Elite&family=Teko:wght@400;500;600;700&display=swap">
@@ -77,6 +77,9 @@ body.post #shade{display:none} /* con post-proceso la vineta va en el shader */
 #loc{display:flex;flex-direction:column;gap:3px;padding-top:2px;min-width:0}
 #room{font-size:clamp(15px,3.6vmin,18px);font-weight:700;letter-spacing:.22em;line-height:1.1}
 #obj{font-size:clamp(13px,3.2vmin,15px);font-weight:500;letter-spacing:.02em;line-height:1.2;text-transform:none;color:var(--dim);max-width:min(33vw,330px)}
+#obj b{display:inline;font-weight:600;color:var(--ink);letter-spacing:.04em}#obj span{display:block;margin:1px 0 0 13px;font-size:.88em;color:var(--dim)}
+#loc{padding:5px 14px 7px 10px;margin:-5px 0 0 -10px;border-radius:5px;background:linear-gradient(90deg,rgba(5,7,10,.5),rgba(5,7,10,.28) 60%,rgba(5,7,10,0))}
+#room{transition:color .5s ease,text-shadow .5s ease}#room.new{color:var(--gold);text-shadow:0 0 14px rgba(233,196,90,.55),var(--tsh)}
 #obj::before{content:"";display:inline-block;width:6px;height:6px;margin:0 7px 1px 0;border:1.5px solid var(--gold);transform:rotate(45deg);vertical-align:middle}
 
 /* arriba-derecha: minimapa, pausa, fps */
@@ -87,7 +90,7 @@ body.post #shade{display:none} /* con post-proceso la vineta va en el shader */
 #pausebtn svg{width:16px;height:16px}
 #pausebtn:active,#pausebtn.on{background:rgba(179,18,27,.55);border-color:var(--blood-hi)}
 #pausebtn:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
-#fps{font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
+#fps{display:none;font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* arriba-centro (segunda fila): poderes y oxigeno */
 #mid{position:absolute;left:50%;top:calc(var(--st) + clamp(58px,13vmin,74px));transform:translateX(-50%);display:flex;align-items:center;gap:14px;white-space:nowrap}
@@ -146,6 +149,10 @@ body.post #shade{display:none} /* con post-proceso la vineta va en el shader */
 /* aviso de progreso (notice) y ronda nueva */
 #banner{position:absolute;left:0;right:0;top:calc(50% - clamp(92px,23vmin,190px));display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;opacity:0;transform:translateY(-6px);transition:opacity .7s ease,transform .7s ease}
 #banner.on{opacity:1;transform:none;transition:opacity .35s ease,transform .35s ease}
+body.fpson #fps{display:block}
+#banner::before{content:"";position:absolute;left:18%;right:18%;top:-22px;bottom:-22px;z-index:-1;background:radial-gradient(ellipse at center,rgba(5,7,10,.5),rgba(5,7,10,.22) 55%,rgba(5,7,10,0) 75%)}
+#ammor{color:rgba(236,238,230,.82)}
+#buy kbd{display:inline-block;margin-right:9px;padding:1px 7px 0;border:1px solid rgba(233,196,90,.7);border-radius:3px;font:700 .82em/1.35 var(--font-ui);letter-spacing:.06em;color:var(--gold);vertical-align:1px}
 #banner .nt{display:flex;align-items:center;gap:clamp(10px,2.4vw,18px);font-family:var(--font-num);font-size:clamp(30px,8vmin,50px);font-weight:400;letter-spacing:.14em;line-height:.9;padding-top:.08em}
 #banner .nt::before,#banner .nt::after{content:"";width:clamp(26px,7vw,64px);height:1px;background:linear-gradient(90deg,rgba(236,42,51,0),rgba(236,42,51,.9))}
 #banner .nt::after{transform:scaleX(-1)}
@@ -410,7 +417,7 @@ body:has(#menu:not([hidden])) #movehint,body:has(#over:not([hidden])) #movehint,
 @media (max-width:520px){.orow,.orow.q{grid-template-columns:1fr 54px}.orow.q{grid-template-columns:1fr}.orow .ol{grid-column:1/-1}.onote{padding-left:0}}
 </style>
 
-<div style="position:fixed;z-index:60;left:50%;top:6px;transform:translateX(-50%);padding:4px 12px;font:600 11px/1.2 sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#ffd23b;background:rgba(0,0,0,.66);border:1px solid rgba(255,210,59,.55);border-radius:4px;pointer-events:none;white-space:nowrap">Piloto visual · M1911 y manos de Blender · no es la versión final</div>
+<div style="position:fixed;z-index:60;left:50%;bottom:4px;transform:translateX(-50%);padding:3px 10px;font:600 10px/1.2 sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#ffd23b;background:rgba(0,0,0,.6);border:1px solid rgba(255,210,59,.45);border-radius:4px;pointer-events:none;white-space:nowrap">Candidata visual en revisión · no es la versión final</div>
 <div id="game"></div>
 <div id="touch"></div>
 <div id="shade"></div>
@@ -5493,7 +5500,10 @@ var _wv1=new THREE.Vector3(),_wv2=new THREE.Vector3(),_wq=new THREE.Quaternion()
 /* s7 inclina/baja vm al recargar (rl*.7, rl*.25, -rl*.16); animGun lo compensa y aplica su propia pose para que se vea el cargador.
    Si se quita esa inclinacion de s7, poner en false. */
 var GUN_UNDO_S7_RELOAD=true;
-function vMesh(parent,geo,mat){var m=new THREE.Mesh(geo,mat);m.renderOrder=vpo++;parent.add(m);return m;}
+/* VM_HANDS>0 mientras se construyen manos, guantes, mangas y punos: esas piezas quedan marcadas (userData.vmHand)
+   para que los modelos GLB puedan reemplazar SOLO el arma o SOLO las manos (a_w_vmglb.js) */
+var VM_HANDS=0;
+function vMesh(parent,geo,mat){var m=new THREE.Mesh(geo,mat);m.renderOrder=vpo++;if(VM_HANDS)m.userData.vmHand=true;parent.add(m);return m;}
 function vp(parent,mat,w,h,d,x,y,z,rx){var m=vMesh(parent,gBox,mat);m.scale.set(w,h,d);m.position.set(x,y,z);if(rx)m.rotation.x=rx;return m;}
 function vz(parent,mat,r,len,x,y,z){var m=vMesh(parent,gCyl,mat);m.scale.set(r,len,r);m.rotation.x=Math.PI/2;m.position.set(x,y,z);return m;}
 function vy(parent,mat,r,len,x,y,z){var m=vMesh(parent,gCyl,mat);m.scale.set(r,len,r);m.position.set(x,y,z);return m;}
@@ -5602,7 +5612,7 @@ function addFlash(g,x,y,z,s,col){
   g.userData.flashCol=col||0xffffff;sp.material.color.setHex(g.userData.flashCol);
 }
 /* posicion de vm para apuntar: la mira (0,sy,sz local) queda en el centro de pantalla a 'eye' m del ojo */
-function setAds(g,sy,sz,eye){var p=g.position;g.userData.ads={x:-p.x,y:-(p.y+sy)-.0012,z:-eye-(p.z+sz)};}
+function setAds(g,sy,sz,eye){var p=g.position;g.userData.ads={x:-p.x,y:-(p.y+sy)-.0012,z:-eye-(p.z+sz)};g.userData.adsEye=eye;}
 /* pista de animacion: [t,x,y,z, t,x,y,z, ...] interpolada con suavizado */
 function trk(T,t,o){
   var n=T.length/4;
@@ -5616,6 +5626,8 @@ function magAnim(A,G,P){
   A.G=G;A.HT=[0,0,0,0, .1,G.x*.3+P.x*.25,G.y*.3+P.y*.25,G.z*.3+P.z*.25, .28,P.x,P.y,P.z, .44,P.x,P.y,P.z,
     .62,G.x+A.axis.x*.1,G.y+A.axis.y*.1,G.z+A.axis.z*.1, .72,G.x,G.y,G.z, .78,G.x,G.y,G.z, .93,0,0,0];
 }
+(function(){function hw(f){return function(){VM_HANDS++;try{return f.apply(this,arguments);}finally{VM_HANDS--;}};}
+  gloveGrip=hw(gloveGrip);gloveUnder=hw(gloveUnder);gloveSupport=hw(gloveSupport);sleeve=hw(sleeve);cuff=hw(cuff);sleevePatch=hw(sleevePatch);})();
 var gunModels={};
 (function(){
   var g,A,M,S,HR,HL,cam=new THREE.Vector3();
@@ -7224,16 +7236,18 @@ function hud(){
 var msgTimer=0;
 /* los toasts de sala nueva, puerta abierta, poderes y perks se convierten en avisos (notice) */
 function toast(t){
-  if(toastRoute(t))return;
+  var tr=toastRoute(t);if(tr===true)return;if(tr)t=tr;
   var m=$('msg');m.textContent=t;m.classList.add('on');clearTimeout(msgTimer);msgTimer=setTimeout(function(){m.classList.remove('on');},1500);
 }
 var doorSeen=[];
+/* devuelve true si el aviso ya quedo atendido; si devuelve un texto, ese es el que se muestra en chico.
+   El centro de la pantalla se reserva para ronda, energia, tarjeta y jefe. */
 function toastRoute(t){
-  var i;
-  for(i=0;i<doors.length;i++)if(doors[i].n===t&&doors[i].open&&!doorSeen[i]){doorSeen[i]=true;notice('Ruta abierta',t);return true;}
-  if(ROOMS[curRoom]&&ROOMS[curRoom].n===t&&curRoom!==0){notice('Nueva zona',t);return true;}
-  for(var k in PU)if(PU[k].name===t){notice(t,'Poder');return true;}
-  for(i=0;i<PERKS.length;i++)if(PERKS[i].n===t){notice(t,'Perk adquirida');return true;}
+  var i,isDoor=false;
+  for(i=0;i<doors.length;i++)if(doors[i].n===t){isDoor=true;if(doors[i].open&&!doorSeen[i]){doorSeen[i]=true;return 'Ruta abierta · '+t;}}
+  if(ROOMS[curRoom]&&ROOMS[curRoom].n===t){if(typeof uiRoomFlash==='function')uiRoomFlash();return true;}   /* sala nueva: destello en el rotulo de arriba */
+  if(!isDoor)for(i=0;i<ROOMS.length;i++)if(ROOMS[i].n===t)return true;                                      /* nombre de una sala donde ya no estoy: caduco */
+  for(i=0;i<PERKS.length;i++)if(PERKS[i].n===t)return 'Perk · '+t;
   return false;
 }
 function feed(t,col){var s=document.createElement('span');s.textContent=t;if(col)s.style.color=col;$('feed').appendChild(s);setTimeout(function(){s.remove();},1100);}
@@ -11049,7 +11063,10 @@ var bannerEl=$('banner');
 
 /* aviso centrado que se desvanece; kind 'rnd' = numero de ronda grande */
 function notice(title,sub,kind){
-  if(noticeQ.length>3)noticeQ.shift();
+  title=String(title);sub=sub==null?'':String(sub);
+  if(noticeOn&&noticeCur&&noticeCur.t===title&&noticeCur.s===sub)return;                       /* ya se esta mostrando */
+  for(var qi=0;qi<noticeQ.length;qi++)if(noticeQ[qi].t===title&&noticeQ[qi].s===sub)return;   /* ya esta en cola */
+  if(noticeQ.length>2)noticeQ.shift();
   noticeQ.push({t:String(title),s:sub==null?'':String(sub),k:kind||''});
   if(!noticeOn&&noticeGap<=0)noticeNext();
 }
@@ -11082,23 +11099,23 @@ function doorOpenTo(r){for(var i=0;i<doors.length;i++){var d=doors[i];if(!d.key&
 function objectiveText(){
   var anyOpen=false,i;
   for(i=0;i<doors.length;i++)if(!doors[i].key&&doors[i].open)anyOpen=true;
-  if(!anyOpen)return 'Gana puntos y abre una puerta';
+  if(!anyOpen)return 'Abre una puerta|Gana puntos disparando';
   /* con la Tarjeta en la mano (o el Puesto ya abierto) eso va primero: es lo unico que se puede perder de vista */
   var kd0=null;for(i=0;i<doors.length;i++)if(doors[i].key==='coloso')kd0=doors[i];
   if(kd0&&!kd0.open&&typeof hasCard!=='undefined'&&hasCard)
-    return (doorOpenTo(4)||doorOpenTo(5)||doorOpenTo(10))?'Abre el Puesto Ícaro con la Tarjeta del Coloso':'Sal a la Superficie y abre el Puesto Ícaro con la Tarjeta del Coloso';
-  if(kd0&&kd0.open&&typeof eclipseTaken!=='undefined'&&!eclipseTaken&&WDEF.eclipse&&gunModels.eclipse)return 'Toma el Cañón Eclipse en la bóveda del Puesto Ícaro';
-  if(!power)return doorOpenTo(3)?'Activa la energía en el Generador':'Abre el camino al Generador y activa la energía';
-  if(perkOwn.indexOf(true)<0)return 'Compra una perk';
+    return (doorOpenTo(4)||doorOpenTo(5)||doorOpenTo(10))?'Abre la bóveda|Puesto Ícaro · Tarjeta obtenida':'Abre la bóveda|Sal a la Superficie · Puesto Ícaro';
+  if(kd0&&kd0.open&&typeof eclipseTaken!=='undefined'&&!eclipseTaken&&WDEF.eclipse&&gunModels.eclipse)return 'Toma el Cañón Eclipse|Bóveda del Puesto Ícaro';
+  if(!power)return doorOpenTo(3)?'Activa la energía|Generador':'Activa la energía|Abre el camino al Generador';
+  if(perkOwn.indexOf(true)<0)return 'Compra una perk|Máquinas encendidas';
   var pap=false;for(i=0;i<slots.length;i++)if(slots[i]&&slots[i].pap)pap=true;
-  if(!pap)return doorOpenTo(6)?'Mejora tu arma en la Forja Lunar (Observatorio)':'Abre el camino al Observatorio y mejora tu arma en la Forja Lunar';
+  if(!pap)return doorOpenTo(6)?'Mejora tu arma|Forja Lunar · Observatorio':'Mejora tu arma|Abre el camino al Observatorio';
   var kd=null;for(i=0;i<doors.length;i++)if(doors[i].key==='coloso')kd=doors[i];
   if(kd&&!kd.open){
-    if(typeof hasCard!=='undefined'&&hasCard)return 'Abre el Puesto Ícaro con la Tarjeta del Coloso';
-    return round<5?'Sobrevive hasta la ronda 5: llega el Coloso':'Derrota al Coloso y toma su Tarjeta';
+    if(typeof hasCard!=='undefined'&&hasCard)return 'Abre la bóveda|Puesto Ícaro · Tarjeta obtenida';
+    return round<5?'Sobrevive|El Coloso llega en la ronda 5':'Derrota al Coloso|Suelta la Tarjeta';
   }
-  if(kd&&typeof eclipseTaken!=='undefined'&&!eclipseTaken&&WDEF.eclipse&&gunModels.eclipse)return 'Toma el Cañón Eclipse en la bóveda del Puesto Ícaro';
-  return 'Sobrevive. Ronda '+round;
+  if(kd&&typeof eclipseTaken!=='undefined'&&!eclipseTaken&&WDEF.eclipse&&gunModels.eclipse)return 'Toma el Cañón Eclipse|Bóveda del Puesto Ícaro';
+  return 'Sobrevive|Ronda '+round;
 }
 
 /* tarjeta de interaccion: "Abrir Laboratorio · 750" -> titulo + linea de costo */
@@ -11106,12 +11123,16 @@ function buyHtml(raw){
   var i=raw.lastIndexOf(' · '),t=i>=0?raw.slice(0,i):raw,c=i>=0?raw.slice(i+3):'',cls='';
   if(c&&/^\d+$/.test(c))c=c+' puntos';
   else if(c)cls=' class="na"';
-  else{c=coarseUI?'Toca para usar':'E para usar';cls=' class="hint"';}
-  return '<b>'+escHtml(t)+'</b><small'+cls+'>'+escHtml(c)+'</small>';
+  else{c=coarseUI?'Toca para usar':'Sin costo';cls=' class="hint"';}
+  return '<b>'+(coarseUI?'':'<kbd>E</kbd>')+escHtml(t)+'</b><small'+cls+'>'+escHtml(c)+'</small>';
 }
 var coarseUI=false;
 try{coarseUI=!!(window.matchMedia&&matchMedia('(any-pointer:coarse)').matches);}catch(_){}
 
+var uiRoomFlashT=0;
+function uiRoomFlash(){uiRoomFlashT=2.4;$('room').classList.add('new');}
+/* FPS oculto salvo que se pida con ?fps=1 */
+try{if(new URLSearchParams(location.search).get('fps')==='1')document.body.classList.add('fpson');}catch(_){}
 function setSprintLock(on){sprintLock=!!on;sprintIdle=0;$('sprint').classList.toggle('on',sprintLock);}
 
 function uiTick(dt){
@@ -11122,9 +11143,10 @@ function uiTick(dt){
   if(now-uiFpsLast>=500){$('fps').textContent=Math.round(uiFpsN*1000/(now-uiFpsLast))+' FPS';uiFpsN=0;uiFpsLast=now;}
   // sala
   if(curRoom!==uiRoomShown&&ROOMS[curRoom]){uiRoomShown=curRoom;$('room').textContent=ROOMS[curRoom].n;}
+  if(uiRoomFlashT>0){uiRoomFlashT-=dt;if(uiRoomFlashT<=0)$('room').classList.remove('new');}
   // objetivo
   uiObjT-=dt;
-  if(uiObjT<=0){uiObjT=.5;var ot=objectiveText();if(ot!==uiObjShown){uiObjShown=ot;$('obj').textContent=ot;}}
+  if(uiObjT<=0){uiObjT=.5;var ot=objectiveText();if(ot!==uiObjShown){uiObjShown=ot;var op=ot.split('|');$('obj').innerHTML='<b>'+escHtml(op[0])+'</b>'+(op[1]?'<span>'+escHtml(op[1])+'</span>':'');}}
   // vida
   var hp=Math.max(0,Math.ceil(P.hp));
   if(hp!==uiHpShown){
@@ -12492,11 +12514,11 @@ var loreCntEl=null,loreSubEl=null,loreSubHead=null,loreSubWho=null,loreSubBox=nu
   hudEl.appendChild(loreSubEl);
   /* altavoz de la base (arriba, centrado) */
   lorePAEl=document.createElement('div');
-  lorePAEl.style.cssText='position:absolute;left:var(--sl,16px);top:calc(var(--st,12px) + clamp(80px,17vmin,104px));transform:translateX(-6px);max-width:min(62vw,420px);box-sizing:border-box;'+
-    'padding:6px 14px 7px 12px;border-left:2px solid var(--gold);border-radius:0 6px 6px 0;background:linear-gradient(90deg,rgba(10,12,14,.78),rgba(10,12,14,.45));text-align:left;'+
+  lorePAEl.style.cssText='position:absolute;left:var(--sl,16px);top:calc(var(--st,12px) + clamp(80px,17vmin,104px));transform:translateX(-6px);max-width:min(46vw,300px);box-sizing:border-box;'+
+    'padding:6px 14px 7px 12px;border-left:2px solid var(--gold);border-radius:0 6px 6px 0;background:linear-gradient(90deg,rgba(10,12,14,.6),rgba(10,12,14,.2));text-align:left;'+
     'opacity:0;transition:opacity .4s ease,transform .4s ease;pointer-events:none';
   var ph=document.createElement('div');ph.style.cssText='font-size:10px;font-weight:700;letter-spacing:.3em;color:var(--gold);margin-bottom:3px';ph.textContent='◉ Altavoz · Base Selene';
-  lorePATxt=document.createElement('div');lorePATxt.style.cssText='font-size:clamp(12px,2.8vmin,15px);font-weight:600;letter-spacing:.08em;line-height:1.3;color:var(--ink)';
+  lorePATxt=document.createElement('div');lorePATxt.style.cssText='font-size:clamp(11px,2.3vmin,13px);font-weight:500;letter-spacing:.06em;line-height:1.3;color:var(--dim)';
   lorePAEl.appendChild(ph);lorePAEl.appendChild(lorePATxt);hudEl.appendChild(lorePAEl);
 })();
 function loreCount(){var n=0;for(var i=0;i<LORE_N;i++)if(loreMask&(1<<i))n++;return n;}
@@ -13215,6 +13237,9 @@ var PS_FIN=[
 ' float sh=1.0-smoothstep(0.0,0.5,L),hi=smoothstep(0.5,1.0,L);',
 ' c*=mix(vec3(1.0),uShTint,sh);c*=mix(vec3(1.0),uHiTint,hi);',
 ' c=c*(1.0-uDark*(1.0-hi))+uLift*(1.0-L);',
+/* hombro de altas luces: lo muy brillante (reactor, paneles, focos) se comprime conservando su color y su degradado
+   en vez de recortarse a blanco plano */
+' float mx=max(c.r,max(c.g,c.b));if(mx>0.7){float t=mx-0.7;c*=(0.7+0.3*t/(t+0.3))/mx;}',
 ' c=clamp(c,0.0,1.0);c=mix(c,c*c*(3.0-2.0*c),uCon);',
 /* vineta */
 ' vec2 q=vUv-0.5;q.x*=uRes.x/uRes.y*0.62;float v=dot(q,q);c*=1.0-uVig*smoothstep(0.06,0.42,v);',
@@ -13232,7 +13257,7 @@ function BloomPassRC(levels,div){
   this.levels=levels;this.div=div;this.down=[];this.up=[];
   for(var i=0;i<levels;i++)this.down.push(rtSmall());
   for(i=0;i<levels-1;i++)this.up.push(rtSmall());
-  this.mPre=mkPostMat(PS_PRE,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uThr:{value:.8},uKnee:{value:.2}});
+  this.mPre=mkPostMat(PS_PRE,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()},uThr:{value:.86},uKnee:{value:.2}});
   this.mDown=mkPostMat(PS_DOWN,{tSrc:{value:null},uTexel:{value:new THREE.Vector2()}});
   this.mUp=mkPostMat(PS_UP,{tSrc:{value:null},tAdd:{value:null},uTexel:{value:new THREE.Vector2()},uAddW:{value:.85}});
   this.q=new THREE.FullScreenQuad(this.mPre);
@@ -13261,7 +13286,7 @@ function FinalPassRC(Q,bloom){
   this.enabled=true;this.needsSwap=true;this.clear=false;this.renderToScreen=true;this.bloom=bloom;
   var defs={};if(Q.aa==='fxaa'||(Q.aa==='msaa'&&!POST.msaa))defs.FXAA=1;if(bloom)defs.BLOOM=1;
   this.u={tDiffuse:{value:null},tBloom:{value:null},uRes:{value:new THREE.Vector2(1,1)},uInv:{value:new THREE.Vector2(1,1)},
-    uBloom:{value:Q.bloom>=5?.5:.45},uTime:{value:0},uGrain:{value:Q.grain},uVig:{value:GRADE.vig},uExpo:{value:GRADE.expo},
+    uBloom:{value:Q.bloom>=5?.4:.36},uTime:{value:0},uGrain:{value:Q.grain},uVig:{value:GRADE.vig},uExpo:{value:GRADE.expo},
     uSat:{value:GRADE.sat},uRedSat:{value:GRADE.redSat},uCon:{value:GRADE.con},uDark:{value:GRADE.dark},
     uShTint:{value:new THREE.Vector3().fromArray(GRADE.sh)},uHiTint:{value:new THREE.Vector3().fromArray(GRADE.hi)},uLift:{value:new THREE.Vector3().fromArray(GRADE.lift)}};
   this.m=mkPostMat(PS_FIN,this.u,defs);this.q=new THREE.FullScreenQuad(this.m);
@@ -13318,8 +13343,8 @@ function postSetScale(s){
 
 /* ---------- por cuadro ---------- */
 var ROOM_GRADE={ /* [exposicion, saturacion, oscuridad extra] por estilo de sala */
-  hangar:[1.0,.72,.08],lab:[.93,.68,.12],dorm:[1.0,.78,.1],gen:[1.02,.8,.08],lock:[1.0,.76,.1],moon:[1.04,.62,0],
-  obs:[1.0,.72,.08],tun:[1.06,.82,.14],med:[.95,.64,.14],puesto:[1.0,.74,.14]};
+  hangar:[1.0,.72,.08],lab:[.93,.68,.12],dorm:[.93,.74,.1],gen:[.94,.76,.08],lock:[.97,.74,.1],moon:[1.04,.62,0],
+  obs:[1.0,.72,.08],tun:[1.04,.78,.12],med:[.98,.64,.12],puesto:[.92,.62,.14]};
 var gradeCur=[1,.74,.1];
 function postTick(dt){
   POST.t+=dt;
@@ -13713,7 +13738,7 @@ var KIT={on:true,px:512,tex:{},
         }catch(e){ok(null);}
       };
       im.onerror=function(){ok(null);};
-      im.src='rooms/tex/'+name+'.jpg';
+      im.src='../rooms/tex/'+name+'.jpg';
     });
   }
   function apply(m,def){
@@ -14921,8 +14946,9 @@ WX.revolver={tp:function(g,M,pap){
    VMGLB[tipo] = ruta del .glb. Si el archivo no esta, falla o falta un nodo obligatorio, se queda el arma procedural.
    POR AHORA ES OPCIONAL: solo se cargan con ?vm=1 en la URL (hasta que Jou acepte el modelo); sin eso queda el arma procedural.
    Contrato del .glb (ver WEB_MANUAL.md): metros, canon hacia -Z, arriba +Y; el origen es el origen del grupo del arma.
-   Nodos por nombre: slide (corredera), hammer (martillo), mag (cargador), hand_r / hand_l (mano + manga, rigidas),
-   y vacios muzzle, sight_rear, sight_front, eject. Lo demas es cuerpo fijo del arma.
+   Nodos por nombre (todos opcionales): slide, charging (palanca de montar), pump (corredera de escopeta), bolt (cerrojo), mag,
+   shell (cartucho en la mano), hammer, hand_r / hand_l (mano + manga, rigidas) y vacios muzzle, sight_rear, sight_front, eject.
+   Lo demas es cuerpo fijo. Si el GLB no trae manos, se quedan las procedurales.
    El juego sigue animando por codigo: estos nodos se cuelgan de los grupos que ya mueve animGun (A.S, A.M, A.LA).
 ===================================================== */
 var VMGLB={pistol:'models/vm_m1911.glb'};
@@ -14932,6 +14958,8 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
   try{VMG.on=new URLSearchParams(location.search).get('vm')!=='0';}catch(_){}
   if(!VMG.on)return;
+  /* ayuda de desarrollo: ?vm=1&vmadd=rifle,shotgun prueba models/vm_<tipo>.glb de armas aun no registradas en VMGLB */
+  try{(new URLSearchParams(location.search).get('vmadd')||'').split(',').forEach(function(t){if(t&&WDEF[t]&&!VMGLB[t])VMGLB[t]='models/vm_'+t+'.glb';});}catch(_){}
 
   /* entorno neutro para los reflejos del metal (el juego no tiene mapa de entorno): cielo frio arriba, piso oscuro, una franja calida */
   function envMap(){
@@ -14974,31 +15002,59 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
     m.needsUpdate=true;return m;
   }
   /* Todo o nada: si cualquier paso falla se retira el modelo y vuelve el arma procedural tal como estaba. */
+  /* KIT DE MATERIALES DE ARMAS (models/kit/kit.json): los GLB de armas no traen texturas; cada material se llama wk_*
+     y aqui recibe las texturas repetibles compartidas (un solo juego para todas las armas). */
+  var KITP=null,KITT={};
+  function kitTex(file,srgb){
+    if(!file)return null;
+    if(!KITT[file]){var t=new THREE.TextureLoader().load('models/kit/'+file);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.flipY=false;
+      t.encoding=srgb?THREE.sRGBEncoding:THREE.LinearEncoding;t.anisotropy=4;KITT[file]=t;}
+    return KITT[file];
+  }
+  function kitApply(m){
+    if(!m||!m.name||m.name.indexOf('wk_')!==0||m.userData.kit)return;m.userData.kit=true;
+    if(!KITP)KITP=new Promise(function(ok){new THREE.FileLoader().load('models/kit/kit.json',function(t){try{ok(JSON.parse(t));}catch(e){ok(null);}},null,function(){ok(null);});});
+    KITP.then(function(K){
+      var d=K&&K[m.name];if(!d)return;
+      if(d.tint)m.color.setRGB(d.tint[0],d.tint[1],d.tint[2]);
+      if(d.c){m.map=kitTex(d.c,true);m.normalMap=kitTex(d.n,false);m.roughnessMap=m.metalnessMap=kitTex(d.orm,false);m.roughness=1;m.metalness=1;}
+      else{if(d.rough!=null)m.roughness=d.rough;if(d.metal!=null)m.metalness=d.metal;}
+      if(d.emissive){m.emissive.setRGB(d.emissive[0],d.emissive[1],d.emissive[2]);m.emissiveIntensity=Math.min(1.5,d.emissiveIntensity||1);m.userData.kitEmit=true;}
+      if(d.opacity!=null&&d.opacity<1){m.transparent=true;m.opacity=d.opacity;m.depthWrite=false;}
+      /* relleno propio del arma, igual que vmMat pero ya con su textura */
+      if(!m.userData.kitEmit){m.emissive.setScalar(VMG.fill);m.emissiveMap=m.map||null;if(!m.map)m.emissive.copy(m.color).multiplyScalar(VMG.fill);}
+      if(m.userData.pap){var p=m.userData.pap;p.map=m.map;p.normalMap=m.normalMap;p.roughnessMap=m.roughnessMap;p.metalnessMap=m.metalnessMap;p.roughness=m.roughness;p.metalness=m.metalness;p.color.copy(m.color).multiplyScalar(.55);p.needsUpdate=true;}
+      m.needsUpdate=true;
+    });
+  }
   function install(type,gltf){
     var g=gunModels[type];if(!g)return 'sin arma '+type;
     var A=g.userData.anim,root=gltf.scene,N={},i;
     root.traverse(function(o){if(o.name)N[o.name]=o;});
-    var need=['slide','mag','hand_l','hand_r'];
-    for(i=0;i<need.length;i++)if(!N[need[i]])return 'falta el nodo '+need[i];
-    if(!A.S||!A.M||!A.LA)return 'el arma no tiene los grupos de animacion';
+    var nm=0;root.traverse(function(o){if(o.isMesh)nm++;});if(!nm)return 'el modelo no trae mallas';
+    /* partes moviles: nodo del GLB -> grupo que ya anima animGun (si el arma lo tiene). Lo demas es cuerpo fijo. */
+    var PARTS={slide:'S',charging:'CH',pump:'PG',bolt:'BT',mag:'M',shell:'SH',hand_l:'LA'},hasHands=!!(N.hand_r||N.hand_l);
     /* 1) preparar materiales (todavia sin tocar el arma) */
     root.traverse(function(o){
       if(!o.isMesh)return;o.frustumCulled=false;o.renderOrder=90;o.raycast=function(){};
       if(Array.isArray(o.material))o.material=o.material.map(vmMat);else o.material=vmMat(o.material);
+      (Array.isArray(o.material)?o.material:[o.material]).forEach(kitApply);
     });
-    var old=[],moved=[],fl=g.userData.flash,keep={fp:fl.position.clone(),mz:g.userData.mz.clone(),ads:g.userData.ads,post:A.post};
-    g.traverse(function(o){if(o.isMesh)old.push(o);});
+    var old=[],moved=[],fl=g.userData.flash,keep={fp:fl.position.clone(),mz:g.userData.mz.clone(),ads:g.userData.ads,eye:g.userData.adsEye,post:A.post};
+    /* si el GLB no trae manos, las manos y mangas procedurales (userData.vmHand) se quedan */
+    g.traverse(function(o){if(o.isMesh&&(hasHands||!o.userData.vmHand))old.push(o);});
     try{
       /* 2) pose de reposo y colgar: attach conserva la posicion de reposo de cada nodo respecto al grupo que lo anima */
-      A.S.position.z=0;A.M.position.copy(A.M0);A.M.rotation.x=A.Mr0;A.M.visible=true;A.LA.position.set(0,0,0);
+      if(A.S)A.S.position.z=0;if(A.CH)A.CH.position.z=0;if(A.PG)A.PG.position.z=0;if(A.BT){A.BT.position.z=0;A.BT.rotation.z=0;}
+      if(A.M&&A.M0){A.M.position.copy(A.M0);A.M.rotation.x=A.Mr0;A.M.visible=true;}if(A.LA)A.LA.position.set(0,0,0);
       g.add(root);g.updateMatrixWorld(true);
-      A.S.attach(N.slide);moved.push(N.slide);A.M.attach(N.mag);moved.push(N.mag);A.LA.attach(N.hand_l);moved.push(N.hand_l);
+      for(var pk in PARTS){var nd=N[pk],gr=A[PARTS[pk]];if(nd&&gr){gr.attach(nd);moved.push(nd);}}
       /* martillo: gira sobre su propio eje lo mismo que el procedural */
       if(N.hammer){var h0=N.hammer.rotation.x;A.post=function(w,f,dt,back){N.hammer.rotation.x=h0+back*10;};}
       /* boca y miras salen del modelo, no de numeros fijos */
       var v=new THREE.Vector3();
       if(N.muzzle){g.worldToLocal(N.muzzle.getWorldPosition(v));fl.position.copy(v);g.userData.mz.set(v.x,v.y,v.z+.02);}
-      if(N.sight_rear){g.worldToLocal(N.sight_rear.getWorldPosition(v));var rp=g.position.clone();g.position.copy(A.gp);setAds(g,v.y,v.z,.25);g.position.copy(rp);}
+      if(N.sight_rear){g.worldToLocal(N.sight_rear.getWorldPosition(v));var rp=g.position.clone();g.position.copy(A.gp);setAds(g,v.y,v.z,g.userData.adsEye||.25);   /* misma distancia de ojo que el arma original (rifle .36, francotirador .10...) */g.position.copy(rp);}
       /* 3) cambio final: fuera lo procedural (el fogonazo es un Sprite y se queda) */
       old.forEach(function(o){o.userData.vmVis=o.visible;o.visible=false;});
       VMG.ok[type]={root:root,nodes:N,old:old};
@@ -15007,7 +15063,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
     }catch(e){
       moved.forEach(function(o){if(o.parent)o.parent.remove(o);});if(root.parent)root.parent.remove(root);
       old.forEach(function(o){if(o.userData.vmVis!==undefined)o.visible=o.userData.vmVis;});
-      fl.position.copy(keep.fp);g.userData.mz.copy(keep.mz);g.userData.ads=keep.ads;A.post=keep.post;delete VMG.ok[type];
+      fl.position.copy(keep.fp);g.userData.mz.copy(keep.mz);g.userData.ads=keep.ads;g.userData.adsEye=keep.eye;A.post=keep.post;delete VMG.ok[type];
       return 'error al instalar: '+String(e&&e.message||e);
     }
   }
@@ -15294,7 +15350,120 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   });
   wpkHud();
 })();
-var decorTick=decorTick||[];
+/* Blender zombie visuals, schema 2. Include after s4.js, before ASSETS.seal.
+   Existing animated groups and damage meshes remain authoritative.
+   Authoring opt-in: ?zvisual=1. No network fields or gameplay changes. */
+var cxZVisual={enabled:false,templates:{},failures:{},installed:0};
+(function(){
+  if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof makeZombie!=='function'||typeof animZombie!=='function'||typeof window==='undefined'||typeof XMLHttpRequest==='undefined')return;
+  try{cxZVisual.enabled=new URLSearchParams(location.search).get('zvisual')!=='0';}catch(e){}
+  if(!cxZVisual.enabled)return;
+  var cxZDefs=['scientist','technician','guard','astronaut','coloso'];
+  var cxZNames=['body','hip','up','hg','jaw','lL_h','lL_k','lR_h','lR_k','aL_s','aL_e','aR_s','aR_e'];
+  var cxZNoRay=function(){};
+  function cxZTargets(z){return {body:z.body,hip:z.hip,up:z.up,hg:z.hg,jaw:z.jaw,
+    lL_h:z.lL.h,lL_k:z.lL.k,lR_h:z.lR.h,lR_k:z.lR.k,
+    aL_s:z.aL.s,aL_e:z.aL.e,aR_s:z.aR.s,aR_e:z.aR.e};}
+  function cxZPrepare(root){
+    root.updateMatrixWorld(true);
+    var metadata,byName={},meshes=[],offsets={},skeleton;
+    root.traverse(function(o){
+      if(o.userData&&o.userData.cxZombieSchema===2)metadata=o.userData;
+      if(o.isBone){if(byName[o.name])throw new Error('duplicate bone '+o.name);byName[o.name]=o;}
+      if(o.isSkinnedMesh)meshes.push(o);
+    });
+    if(!metadata||!metadata.cxGameRest)throw new Error('missing schema 2 game rest pivots');
+    ['z_body','z_head','z_eyes'].forEach(function(name){
+      var matches=meshes.filter(function(m){return m.name===name;});
+      if(matches.length!==1)throw new Error('missing or duplicate skinned mesh '+name);
+    });
+    if(meshes.length!==3)throw new Error('expected three skinned meshes');
+    skeleton=meshes[0].skeleton;
+    meshes.forEach(function(m){
+      if(m.skeleton.bones.length!==skeleton.bones.length||m.skeleton.bones.some(function(b,i){return b!==skeleton.bones[i];}))throw new Error('inconsistent skeleton');
+      /* Preserve authored glTF colour spaces and PBR maps. */
+      m.frustumCulled=false;m.raycast=cxZNoRay;
+    });
+    cxZNames.forEach(function(name){
+      var p=metadata.cxGameRest[name],b=byName[name];
+      if(!b||!Array.isArray(p)||p.length!==3||!p.every(Number.isFinite))throw new Error('invalid rest bone '+name);
+      offsets[name]=new THREE.Matrix4().makeTranslation(-p[0],-p[1],-p[2]).multiply(b.matrixWorld);
+    });
+    skeleton.bones.forEach(function(b){if(cxZNames.indexOf(b.name)<0)throw new Error('unmapped bone '+b.name);});
+    return {root:root,skeleton:skeleton,offsets:offsets};
+  }
+  function cxZSync(z){
+    var v=z.cxVisual;if(!v)return;
+    z.g.updateMatrixWorld(true);
+    for(var i=0;i<v.bones.length;i++){
+      var b=v.bones[i],target=v.targets[b.name];
+      v.world.multiplyMatrices(target.matrixWorld,v.offsets[b.name]);
+      v.local.copy(b.parent.matrixWorld).invert().multiply(v.world);
+      v.local.decompose(b.position,b.quaternion,b.scale);
+      b.updateMatrix();
+      b.matrixWorld.multiplyMatrices(b.parent.matrixWorld,b.matrix);
+      b.matrixWorldNeedsUpdate=false;
+    }
+    v.head.visible=z.hg.visible;
+    v.eyes.visible=z.hg.visible&&!z.dead;
+  }
+  function cxZInstall(z){
+    if(!z||z.dead||z.cxVisual)return;
+    var kind=z.boss?'coloso':(z.suit?'astronaut':cxZDefs[z.variant]),tpl=cxZVisual.templates[kind];
+    if(!tpl)return;
+    var targets=cxZTargets(z),old=[],oldEyes=z.eyes,clone;
+    for(var k=0;k<cxZNames.length;k++)if(!targets[cxZNames[k]])return;
+    z.g.traverse(function(o){if(o.isMesh||o.isSprite)old.push({o:o,v:o.visible});});
+    try{
+      clone=tpl.root.clone(true);
+      var bones={},ordered=[],head,eyes,meshList=[];
+      /* Scene traversal is parent before child, required by world-pose retargeting. */
+      clone.traverse(function(o){
+        if(o.isBone){bones[o.name]=o;ordered.push(o);}
+        if(o.isSkinnedMesh){meshList.push(o);o.frustumCulled=false;o.raycast=cxZNoRay;o.userData.cxZombieVisual=true;
+          if(o.name==='z_head')head=o;if(o.name==='z_eyes')eyes=o;}
+      });
+      var skeleton=new THREE.Skeleton(tpl.skeleton.bones.map(function(b){return bones[b.name];}),tpl.skeleton.boneInverses.map(function(m){return m.clone();}));
+      /* clone(true) keeps the source skeleton: explicitly rebind to this instance. */
+      meshList.forEach(function(m){m.bind(skeleton,m.bindMatrix.clone());});
+      z.g.add(clone);
+      z.cxVisual={kind:kind,root:clone,bones:ordered,targets:targets,offsets:tpl.offsets,skeleton:skeleton,
+        head:head,eyes:eyes,world:new THREE.Matrix4(),local:new THREE.Matrix4()};
+      cxZSync(z);
+      old.forEach(function(p){p.o.visible=false;});
+      z.eyes=[eyes];cxZVisual.installed++;
+      /* Removal covers corpse expiry, restart, and remote despawn. Shared mesh
+         geometry/materials survive; only this instance's bone texture is freed. */
+      var disposeBones=function(){skeleton.dispose();z.g.removeEventListener('removed',disposeBones);};
+      z.g.addEventListener('removed',disposeBones);
+    }catch(e){
+      if(clone&&clone.parent)clone.parent.remove(clone);
+      if(skeleton)skeleton.dispose();
+      old.forEach(function(p){p.o.visible=p.v;});z.eyes=oldEyes;delete z.cxVisual;
+      cxZVisual.failures[kind]=String(e&&e.message||e);
+    }
+  }
+  var cxZOriginalMake=makeZombie,cxZOriginalAnim=animZombie;
+  makeZombie=function(x,z,suit,vf){
+    var zombie=cxZOriginalMake(x,z,suit,vf);
+    /* Boss/network code assigns .boss after makeZombie returns: defer choosing
+       the dedicated Coloso template so it never receives a normal astronaut. */
+    Promise.resolve().then(function(){try{cxZInstall(zombie);}catch(e){cxZVisual.failures.install=String(e&&e.message||e);}});
+    return zombie;
+  };
+  animZombie=function(z,dt,moving){
+    var result=cxZOriginalAnim(z,dt,moving);
+    cxZSync(z);return result;
+  };
+  var cxZLoads=cxZDefs.map(function(kind){return new Promise(function(resolve){
+    try{new THREE.GLTFLoader().load('models/zombies/'+kind+'.glb',function(gl){
+      try{cxZVisual.templates[kind]=cxZPrepare(gl.scene);if(typeof zombies!=='undefined')zombies.forEach(cxZInstall);}
+      catch(e){cxZVisual.failures[kind]=String(e&&e.message||e);}resolve();
+    },null,function(){cxZVisual.failures[kind]='asset unavailable';resolve();});}
+    catch(e){cxZVisual.failures[kind]=String(e&&e.message||e);resolve();}
+  });});
+  if(window.ASSETS&&typeof ASSETS.track==='function')ASSETS.track(Promise.all(cxZLoads),'Personal de Selene');
+})();
 var clock=new THREE.Clock();
 var dmgEl=$('dmg');
 function gameOver(){

@@ -6078,6 +6078,7 @@ function animGun(w,rlFrac,dt){
     if(f<0&&A.ft>.1&&A.ft<.45)pz=Math.sin(Math.PI*(A.ft-.1)/.35);
     if(f>.9)pz=Math.sin(Math.PI*(f-.9)/.1);
     A.PG.position.z=.075*pz;
+    if(A.vmHandsPose)A.vmHandsPose(w,f,dt);   /* gancho de la biblioteca de manos (cx_hands.js): pose de la mano izquierda en la recarga */
     return;
   }
   /* cargador / celda */
@@ -6362,7 +6363,7 @@ function makeTPWeapon(type,pap){
 var mBunk=new THREE.MeshPhongMaterial({color:0x35424e,specular:0x222a30,shininess:20});
 var mLocker=new THREE.MeshPhongMaterial({color:0x4b5a66,specular:0x445058,shininess:35});
 var mRock=new THREE.MeshPhongMaterial({color:0x7a766f,specular:0x0c0c0c,shininess:3,flatShading:true});
-var mTank=new THREE.MeshPhongMaterial({color:0x6b6f62,specular:0x555a50,shininess:45});
+var mTank=new THREE.MeshPhongMaterial({color:0x5c6055,specular:0x22241f,shininess:18});   /* antes especular 0x555a50 y brillo 45: se quemaba bajo las lamparas */
 var PM={crate:mCrate,conc:mConc,counter:mCounter,bunk:mBunk,locker:mLocker,metal:mMetal};
 function blockNav(wx,wz,w,d){
   var x0=cellOf(wx-w/2,OX),x1=cellOf(wx+w/2-.001,OX),z0=cellOf(wz-d/2,OZ),z1=cellOf(wz+d/2-.001,OZ),i,j;
@@ -13795,7 +13796,9 @@ function shaftTick(dt){
   shaftU.uPow.value=Math.min(1,shaftPowT);shaftU.uTime.value=time;
   shaftU.uFogD.value=scene.fog?scene.fog.density:0;
   var bk=(typeof blackK!=='undefined')?blackK:0;
-  shaftU.uK.value=SHAFT_K*(1-bk);shaftU.uPoolK.value=SHAFT_POOL*(1-bk);
+  /* en el Observatorio y el Puesto Icaro los conos de luz dejaban un parche blanco-lila que competia con la Forja y el pedestal */
+  var shK=(ROOMS[curRoom]&&(ROOMS[curRoom].s==='puesto'||ROOMS[curRoom].s==='obs'))?.45:1;
+  shaftU.uK.value=SHAFT_K*(1-bk)*shK;shaftU.uPoolK.value=SHAFT_POOL*(1-bk)*shK;
   for(var i=0;i<shaftMeshes.length;i++)shaftMeshes[i].visible=on&&bk<.98;
 }
 
@@ -14064,13 +14067,13 @@ var ROOM3D_DEF=[{ri:0,base:'../rooms/hangar',label:'Hangar'},{ri:1,base:'../room
 var KIT={on:true,px:512,tex:{},
   /* estilo de sala -> [textura, tinte] para piso (f), pared (w) y techo (c) */
   sty:{
-    dorm:{f:['lino',0xa39d88],w:['paint',0xa9a48c],c:['paint',0x5c5a50]},
+    dorm:{f:['lino',0xa39d88],w:['paint',0x86826d],c:['paint',0x5c5a50]},
     gen:{f:['plate',0x9c9e9a],w:['rust',0xb0b1aa],c:['plate',0x54575a]},
-    lock:{f:['plate',0xa2a29c],w:['paint',0xa2a79e],c:['paint',0x595b57]},
-    obs:{f:['floor',0x9099a8],w:['paint',0x8793a6],c:['paint',0x4b5361]},
+    lock:{f:['plate',0xa2a29c],w:['paint',0x80857c],c:['paint',0x595b57]},
+    obs:{f:['floor',0x9099a8],w:['paint',0x6c7689],c:['paint',0x4b5361]},
     tun:{f:['floor',0x7c746c],w:['rust',0x978a7e],c:['rust',0x4b4541]},
-    med:{f:['lino',0xb8c3bb],w:['tile',0xc0ccc4],c:['paint',0x6e7973]},
-    puesto:{f:['plate',0x7e7a92],w:['paint',0x807b94],c:['paint',0x48445b]}
+    med:{f:['lino',0xb8c3bb],w:['tile',0x9aa59d],c:['paint',0x6e7973]},
+    puesto:{f:['plate',0x7e7a92],w:['paint',0x676378],c:['paint',0x48445b]}
   }
 };
 (function(){
@@ -14116,6 +14119,9 @@ var WX={},WXSND={},WXNET={},WPK_TICK=[],WPK_RESET=[];
 var EQ={gren:2,grenMax:4,decoy:0,decoyMax:3};
 /* encuadre del arma en mano: desplazamiento y giro que se SUMAN a la pose de cadera (0 al apuntar: la mira no se mueve) */
 var VMP={x:.04,y:.06,z:0,rx:0,ry:-.10,rz:.06};   /* mas alta, mas plana y menos girada: lectura tipo BO2 */
+/* durante la recarga, todo el arma en mano se adelanta suavemente esta distancia (m): asi la culata no queda cortada junto a la camara.
+   Solo presentacion: se mueve el conjunto entero, no cambia tiempos ni trayectorias. */
+var VM_RLPUSH={shotgun:.13};
 var wpkBusy=0;            // >0: manos ocupadas (cuchillazo / lanzamiento): no se dispara ni se recarga
 var THROWN=[],DECOYS=[];
 
@@ -14343,7 +14349,7 @@ function wpkTick(dt){
 }
 /* posicion del arma en la mano de los avatares (los modelos en tercera persona los da WX[tipo].tp) */
 AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34];
-/* Ronda Cero — shared rigid hands adapter, STAGING ONLY, 2026-10-11.
+/* Ronda Cero — shared rigid hands adapter V3.1, STAGING ONLY, 2026-10-11.
  * No automatic loading, installation, frame loop, or changes to gun gameplay.
  * Load after THREE/GLTFLoader and weapon constructors. See HANDS_ADAPTER_INTEGRATION.md.
  * cxHandsAfterInstall(type,g,A,N,vmMat) matches Claude's loader hook (3ea53c7).
@@ -14372,7 +14378,18 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
   function contains(parent,node){while(node){if(node===parent)return true;node=node.parent;}return false;}
   function finite3(a){return a&&a.length>=3&&isFinite(a[0])&&isFinite(a[1])&&isFinite(a[2]);}
   function ownHand(o){return !!(o.userData&&o.userData.cxHand);}
-  function named(root,name){return root&&root.getObjectByName(name);}
+  /* GLTFLoader r128 removes dots/reserved binding characters. Accept exact names,
+   * the loader's sanitized spelling, and original userData.name without renaming
+   * the shared template or depending on the loader workaround's promise order.
+   */
+  function named(root,name){
+    if(!root)return null;
+    var hit=root.getObjectByName(name);if(hit)return hit;
+    var clean=typeof THREE!=='undefined'&&THREE.PropertyBinding&&THREE.PropertyBinding.sanitizeNodeName?
+      THREE.PropertyBinding.sanitizeNodeName(name):name.replace(/\s/g,'_').replace(/[.\[\]:\/]/g,'');
+    hit=root.getObjectByName(clean);if(hit)return hit;
+    root.traverse(function(o){if(!hit&&o.userData&&o.userData.name===name)hit=o;});return hit;
+  }
 
   /* Materials are shared across all installed poses. Original template materials/maps
    * remain intact. Default shader matches existing viewmodel depth compression.
@@ -14451,6 +14468,7 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
   function restore(state){
     if(state.stopped)return;state.stopped=true;
     if(state.wrapper&&state.A.custom===state.wrapper)state.A.custom=state.previousCustom;
+    if(state.handsPose&&state.A.vmHandsPose===state.handsPose)state.A.vmHandsPose=state.previousHandsPose;
     state.roots.forEach(function(r){if(r.parent)r.parent.remove(r);});
     state.anchors.forEach(function(a){if(a.parent)a.parent.remove(a);});
     state.hidden.forEach(function(x){x.node.visible=x.visible;});
@@ -14507,6 +14525,25 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
       if(opts.leftCorrection){if(!finite3(opts.leftCorrection))throw new Error('Invalid leftCorrection');left.position.add(new THREE.Vector3().fromArray(opts.leftCorrection));}
       else left.position.y+=dy;
       fitSleeve(right,cfg.r,g,A.rw,state,opts);fitSleeve(left,cfg.l,A.LA,A.lw,state,opts);
+      /* Current shotgun: keep shell/carrier trajectory unchanged; lift only the
+       * visual support-hand root to transport the shell on the palm. r_weap's
+       * shotgun branch calls A.vmHandsPose AFTER assigning A.PG.position.z.
+       * .0638 is an absolute pose-root Y, not another .022 support correction.
+       */
+      if(type==='shotgun'){
+        state.leftRestY=left.position.y;
+        state.previousHandsPose=A.vmHandsPose;
+        state.handsPose=function(w,f,dt){
+          if(state.previousHandsPose)state.previousHandsPose.call(A,w,f,dt);
+          var e=0;
+          if(f>=0&&f<.9){
+            var a=Math.min(1,f/.1),b=Math.min(1,(.9-f)/.08);
+            a=a*a*(3-2*a);b=b*b*(3-2*b);e=a*b;
+          }
+          left.position.y=state.leftRestY+(.0638-state.leftRestY)*e;
+        };
+        A.vmHandsPose=state.handsPose;
+      }
       if(type==='nail'&&opts.geometryMode!=='contract'&&!opts.leftCorrection)state.warnings.push('Nail contact uses provisional legacy magazine rail, not barrel');
       if(type==='revolver'){
         var reload=copyPose(template,cfg.l,opts);state.roots.push(reload);refs.HLX.add(reload);
@@ -14548,6 +14585,11 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
     if(N&&(N.hand_r||N.hand_l))return Promise.resolve(fail('Weapon has embedded hands'));
     var opts=g.userData.cxHandsOptions||{};
     if(!opts.geometryMode)opts.geometryMode=N?'contract':'legacy';
+    /* Current shotgun GLB retains the legacy support center (HL.y=-.038 vs
+     * pump.y=-.016). Explicit child correction also applies in contract mode.
+     * Procedural fallback already receives cfg.dy; never add it a second time.
+     */
+    if(type==='shotgun'&&N&&!opts.leftCorrection)opts.leftCorrection=[0,.022,0];
     if(prepareMaterial&&!opts.prepareMaterial)opts.prepareMaterial=prepareMaterial;
     g.userData.cxHandsOptions=opts;
     var ticket=(g.userData.cxHandsRequest||0)+1;g.userData.cxHandsRequest=ticket;
@@ -14566,54 +14608,48 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
     });
   }
   global.cxLoadHands=load;
+  global.cxHandsFindNode=named;
   global.cxInstallHands=install;
   global.cxHandsAfterInstall=afterInstall;
   global.cxSyncHands=function(g){if(g&&g.userData&&g.userData.cxHands)sync(g.userData.cxHands);};
   global.cxUninstallHands=function(g){if(g&&g.userData){g.userData.cxHandsRequest=(g.userData.cxHandsRequest||0)+1;if(g.userData.cxHands)restore(g.userData.cxHands);}};
 })(typeof window!=='undefined'?window:globalThis);
 
-/* STAGING REVIEW PATCH — no automatic install, no tests performed.
- * Call cxEnableRevolverSleeveTether(gunModels.revolver) AFTER cxInstallHands succeeds.
- * Requires cx_hands state/rollback contract. Touches only cloned l_cup.sleeve geometry
- * and its private material; fingers, glove, cuff, HT, SL and reload timing are untouched.
- * One active sleeve is recomputed from immutable base vertices during reload.
+/* V3 revolver sleeve: bounded cross-section swept along a camera-space curve.
+ * Replaces V2's vertex displacement toward an elbow 8 cm from the eye. That
+ * displacement enlarged the sleeve in perspective and could shear it across
+ * the screen. This construction keeps the elbow 45 cm away, below the frustum,
+ * and transports sleeve cross-sections instead of pulling old vertices.
+ * No automatic loads. Called by the existing post-install hook above.
  */
 (function(global){
   'use strict';
-  function failure(reason){return {ok:false,reason:reason};}
-  function clamp01(n){return Math.max(0,Math.min(1,n));}
-  function smooth(n){n=clamp01(n);return n*n*(3-2*n);}
-  function cameraOf(g){var p=g;while(p){if(p.isCamera)return p;p=p.parent;}return null;}
-  function active(root,g){for(var p=root;p;p=p.parent){if(!p.visible)return false;if(p===g)return true;}return false;}
-  function removeItem(array,item){var i=array.indexOf(item);if(i>=0)array.splice(i,1);}
-
+  function fail(s){return {ok:false,reason:s};}
+  function sat(x){return Math.max(0,Math.min(1,x));}
+  function ss(x){x=sat(x);return x*x*(3-2*x);}
+  function find(root,name){return global.cxHandsFindNode(root,name);}
+  function cameraOf(o){while(o){if(o.isCamera)return o;o=o.parent;}return null;}
+  function shown(root,g){for(var p=root;p;p=p.parent){if(!p.visible)return false;if(p===g)return true;}return false;}
+  function remove(a,o){var i=a.indexOf(o);if(i>=0)a.splice(i,1);}
   function enable(g,opts){
     opts=opts||{};
-    if(typeof THREE==='undefined'||!g||!g.userData)return failure('Missing weapon/THREE');
-    var state=g.userData.cxHands,A=g.userData.anim;
-    if(!state||state.stopped||!state.result||state.result.type!=='revolver')return failure('Install revolver library hands first');
+    var state=g&&g.userData&&g.userData.cxHands,A=g&&g.userData&&g.userData.anim;
+    if(!state||state.stopped||state.result.type!=='revolver')return fail('Install revolver hands first');
     if(state.cxSleeveTether)return state.cxSleeveTether.result;
-    if(typeof A.custom!=='function'||A.custom!==state.wrapper)return failure('Unexpected custom animator; compose explicitly before tether');
-    var camera=opts.camera||cameraOf(g);
-    if(!camera||!camera.isCamera)return failure('Camera ancestor unavailable');
-    /* Camera-local point: lower left and near eye, outside normal gameplay framing.
-     * It never inherits A.LA translation or the revolver's reload rotation.
-     */
-    var xyz=opts.elbowCamera||[-.26,-.35,-.08];
-    if(xyz.length!==3||!xyz.every(function(v){return typeof v==='number'&&isFinite(v);}))return failure('Invalid camera elbow');
-    var target=new THREE.Vector3().fromArray(xyz),records=[],privateMaterials=[];
+    if(A.custom!==state.wrapper)return fail('Unexpected custom animator composition');
+    var camera=opts.camera||cameraOf(g);if(!camera)return fail('Camera ancestor unavailable');
+    var xyz=opts.elbowCamera||[-.30,-.53,-.45];
+    if(xyz.length!==3||!xyz.every(function(v){return typeof v==='number'&&isFinite(v);})||xyz[2]>-.30)return fail('Elbow must be at least 30 cm from eye');
+    var target=new THREE.Vector3().fromArray(xyz),records=[],ownedMaterials=[];
     var previous=A.custom,previousStateWrapper=state.wrapper,previousUninstall=state.result.uninstall;
     var tether={stopped:false,result:null};
-    function disposeMaterial(m){if(m&&m.dispose)m.dispose();}
-    function restoreRecords(){
+    function undoRecords(){
       records.forEach(function(r){
         r.mesh.geometry=r.oldGeometry;r.mesh.material=r.oldMaterial;
         if(r.oldM0===undefined)delete r.mesh.userData.m0;else r.mesh.userData.m0=r.oldM0;
-        removeItem(state.geometries,r.geometry);
-        /* Base adapter already disposes geometry on whole-install teardown. */
-        if(!state.stopped)r.geometry.dispose();
+        remove(state.geometries,r.geometry);if(!state.stopped)r.geometry.dispose();
       });
-      privateMaterials.forEach(disposeMaterial);
+      ownedMaterials.forEach(function(m){m.dispose();});
     }
     function disable(){
       if(tether.stopped)return;tether.stopped=true;
@@ -14622,96 +14658,116 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
         if(state.wrapper===wrapper)state.wrapper=previousStateWrapper;
         if(state.result.uninstall===uninstallAll)state.result.uninstall=previousUninstall;
       }
-      restoreRecords();if(state.cxSleeveTether===tether)delete state.cxSleeveTether;
+      undoRecords();if(state.cxSleeveTether===tether)delete state.cxSleeveTether;
     }
     function uninstallAll(){disable();previousUninstall();}
-    function localPoint(node,mesh){return mesh.worldToLocal(node.getWorldPosition(new THREE.Vector3()));}
-    function sleeveMaterial(old){
-      var m=old.clone();m.userData={cxHandMaterial:true};
-      var compile=old.onBeforeCompile,key=old.customProgramCacheKey;
-      m.onBeforeCompile=function(shader,renderer){
-        if(compile)compile.call(this,shader,renderer);
-        /* Claude's stock clipping plane is appropriate for buttstocks but cuts
-         * a connected forearm. Relax ONLY this sleeve's shader to 2 cm.
-         */
-        shader.fragmentShader=shader.fragmentShader.replace(/if\s*\(\s*vVmZ\s*<\s*0?\.17\s*\)\s*discard\s*;/g,'if(vVmZ<0.02)discard;');
+    function material(old){
+      var m=old.clone(),compile=old.onBeforeCompile,key=old.customProgramCacheKey;m.userData={cxHandMaterial:true};
+      /* Same map/color/roughness/env/fill and integrator compile hook. Only the
+       * immediate wrist join needs a 10 cm near cutoff; NOT V2's 2 cm. The swept
+       * forearm itself is routed away from the eye (>=18 cm after the join).
+       */
+      m.onBeforeCompile=function(sh,renderer){
+        if(compile)compile.call(this,sh,renderer);
+        sh.fragmentShader=sh.fragmentShader.replace(/if\s*\(\s*vVmZ\s*<\s*0?\.17\s*\)\s*discard\s*;/g,'if(vVmZ<0.10)discard;');
       };
-      m.customProgramCacheKey=function(){return (key?key.call(old):'vm')+'|cx-revolver-sleeve-near002';};
-      m.needsUpdate=true;privateMaterials.push(m);return m;
+      m.customProgramCacheKey=function(){return (key?key.call(old):'vm')+'|cx-sleeve-sweep-v3';};
+      m.needsUpdate=true;ownedMaterials.push(m);return m;
     }
     try{
       state.roots.forEach(function(root){
         if(root.name!=='l_cup')return;
-        var mesh=root.getObjectByName('l_cup.sleeve'),cuff=root.getObjectByName('l_cup.cuff_attach'),elbow=root.getObjectByName('l_cup.elbow');
-        if(!mesh||!mesh.isMesh||!cuff||!elbow)throw new Error('Incomplete left sleeve/landmarks');
+        var mesh=find(root,'l_cup.sleeve'),cuff=find(root,'l_cup.cuff_attach'),elbow=find(root,'l_cup.elbow');
+        if(!mesh||!mesh.isMesh||!cuff||!elbow)throw new Error('Missing left sleeve landmarks');
         root.updateWorldMatrix(true,true);
-        var c=localPoint(cuff,mesh),e=localPoint(elbow,mesh),axis=e.clone().sub(c),len=axis.length();
-        if(!isFinite(len)||len<.09)throw new Error('Invalid sleeve length');axis.divideScalar(len);
-        var oldGeometry=mesh.geometry,geometry=oldGeometry.clone(),pos=geometry.attributes.position;
-        var base=new Float32Array(pos.count*3),weights=new Float32Array(pos.count),v=new THREE.Vector3();
+        var c=mesh.worldToLocal(cuff.getWorldPosition(new THREE.Vector3()));
+        var e=mesh.worldToLocal(elbow.getWorldPosition(new THREE.Vector3()));
+        var axis=e.clone().sub(c),length=axis.length();if(length<.09||!isFinite(length))throw new Error('Invalid sleeve length');axis.divideScalar(length);
+        var geo=mesh.geometry.clone(),pos=geo.attributes.position;
+        var base=new Float32Array(pos.count*3),radials=new Float32Array(pos.count*3),stations=new Float32Array(pos.count);
+        var v=new THREE.Vector3(),rad=new THREE.Vector3(),cuffRadius=.026;
         for(var i=0;i<pos.count;i++){
           v.fromBufferAttribute(pos,i);base[i*3]=v.x;base[i*3+1]=v.y;base[i*3+2]=v.z;
-          weights[i]=smooth((v.sub(c).dot(axis)-.045)/(len-.045));
+          v.sub(c);var s=v.dot(axis);stations[i]=s;rad.copy(v).addScaledVector(axis,-s);
+          radials[i*3]=rad.x;radials[i*3+1]=rad.y;radials[i*3+2]=rad.z;
+          if(s>=-.005&&s<=.025)cuffRadius=Math.max(cuffRadius,Math.min(.034,rad.length()));
         }
-        if(geometry.getAttribute('tangent'))geometry.deleteAttribute('tangent');
-        var r={root:root,mesh:mesh,oldGeometry:oldGeometry,geometry:geometry,oldMaterial:mesh.material,
-          oldM0:mesh.userData.m0,base:base,weights:weights,elbow:e,dirty:false};
-        /* Register geometry before later steps can throw. Parent rollback owns it. */
-        records.push(r);state.geometries.push(geometry);mesh.geometry=geometry;
-        mesh.material=Array.isArray(r.oldMaterial)?r.oldMaterial.map(sleeveMaterial):sleeveMaterial(r.oldMaterial);
-        /* setPap uses m0 to restore material; point it to this private sleeve material. */
-        mesh.userData.m0=mesh.material;
+        if(geo.getAttribute('tangent'))geo.deleteAttribute('tangent');
+        var r={root:root,mesh:mesh,oldGeometry:mesh.geometry,geometry:geo,oldMaterial:mesh.material,oldM0:mesh.userData.m0,
+          base:base,radials:radials,stations:stations,cuff:c,axis:axis,length:length,radius:cuffRadius,dirty:false};
+        records.push(r);state.geometries.push(geo);mesh.geometry=geo;
+        mesh.material=Array.isArray(r.oldMaterial)?r.oldMaterial.map(material):material(r.oldMaterial);mesh.userData.m0=mesh.material;
       });
-      if(records.length!==2)throw new Error('Expected normal and HLX left sleeve instances');
-    }catch(e){restoreRecords();return failure(String(e&&e.message||e));}
+      if(records.length!==2)throw new Error('Expected two left sleeve instances');
+    }catch(e){undoRecords();return fail(String(e&&e.message||e));}
 
-    var desired=new THREE.Vector3(),delta=new THREE.Vector3();
+    var cameraInv=new THREE.Matrix4(),toCamera=new THREE.Matrix4(),toMesh=new THREE.Matrix4(),normalToCamera=new THREE.Matrix3();
+    var start=new THREE.Vector3(),axisCam=new THREE.Vector3(),end=new THREE.Vector3(),p1=new THREE.Vector3(),p2=new THREE.Vector3();
+    var center=new THREE.Vector3(),tangent=new THREE.Vector3(),radial=new THREE.Vector3(),vertex=new THREE.Vector3(),baseVertex=new THREE.Vector3();
+    var rotation=new THREE.Quaternion(),blendedRotation=new THREE.Quaternion(),protectedLength=.025;
     function update(f){
-      /* Smoothly enter/leave the sleeve-only correction; no transition applied to
-       * hand contacts. Exiting reload always restores base vertices exactly.
-       */
-      var blend=f>=0?smooth(f/.08)*smooth((1-f)/.12):0;
-      camera.updateWorldMatrix(true,false);
+      var blend=f>=0?ss(f/.065)*ss((1-f)/.10):0;
+      camera.updateWorldMatrix(true,false);cameraInv.copy(camera.matrixWorld).invert();
       records.forEach(function(r){
-        var amount=active(r.root,g)?blend:0;
-        if(amount===0&&!r.dirty)return;
+        var amount=shown(r.root,g)?blend:0;if(amount===0&&!r.dirty)return;
         var p=r.geometry.attributes.position,base=r.base;
-        if(amount){
+        if(!amount){for(var j=0;j<p.count;j++)p.setXYZ(j,base[j*3],base[j*3+1],base[j*3+2]);}
+        else{
           r.mesh.updateWorldMatrix(true,false);
-          desired.copy(target);camera.localToWorld(desired);r.mesh.worldToLocal(desired);
-          delta.copy(desired).sub(r.elbow).multiplyScalar(amount);
-        }else delta.set(0,0,0);
-        for(var i=0;i<p.count;i++){
-          var w=r.weights[i];p.setXYZ(i,base[i*3]+delta.x*w,base[i*3+1]+delta.y*w,base[i*3+2]+delta.z*w);
+          toCamera.multiplyMatrices(cameraInv,r.mesh.matrixWorld);toMesh.copy(toCamera).invert();
+          normalToCamera.setFromMatrix4(toCamera);
+          axisCam.copy(r.axis).transformDirection(toCamera);
+          start.copy(r.cuff).addScaledVector(r.axis,protectedLength).applyMatrix4(toCamera);
+          end.copy(target);
+          /* Keep the cap entirely below frame for actual FOV/zoom, rather than
+           * hoping a short near-eye forearm happens to be off screen.
+           */
+          var fy=Math.abs(camera.projectionMatrix.elements[5])||1;
+          end.y=Math.min(end.y,-Math.abs(end.z)/fy*1.35-.06);
+          p1.copy(start).addScaledVector(axisCam,.035);
+          p1.z=Math.min(p1.z,start.z,-.18);p1.y=Math.min(p1.y,start.y-.02);
+          p2.copy(end).lerp(start,.25);p2.z=Math.min(p2.z,-.30);
+          for(var i=0;i<p.count;i++){
+            baseVertex.set(base[i*3],base[i*3+1],base[i*3+2]);
+            var s=r.stations[i];
+            if(s<=protectedLength){p.setXYZ(i,baseVertex.x,baseVertex.y,baseVertex.z);continue;}
+            var t=sat((s-protectedLength)/(r.length-protectedLength)),a=1-t;
+            center.copy(start).multiplyScalar(a*a*a).addScaledVector(p1,3*a*a*t).addScaledVector(p2,3*a*t*t).addScaledVector(end,t*t*t);
+            tangent.copy(p1).sub(start).multiplyScalar(3*a*a);
+            vertex.copy(p2).sub(p1);tangent.addScaledVector(vertex,6*a*t);
+            vertex.copy(end).sub(p2);tangent.addScaledVector(vertex,3*t*t);tangent.normalize();
+            rotation.setFromUnitVectors(axisCam,tangent);
+            var sectionBlend=ss((s-protectedLength)/.04);
+            blendedRotation.identity().slerp(rotation,sectionBlend);
+            radial.set(r.radials[i*3],r.radials[i*3+1],r.radials[i*3+2]).applyMatrix3(normalToCamera).applyQuaternion(blendedRotation);
+            /* Preserve UV/topology, NOT an unbounded radial displacement. Beyond
+             * the cuff blend the section never exceeds cuff radius; projected
+             * radius/depth is bounded to avoid V2's near-eye screen-filling cone.
+             */
+            var radLen=radial.length();
+            var limit=Math.min(r.radius,Math.max(.018,-center.z*.15));
+            if(radLen>limit&&radLen>0)radial.multiplyScalar(1-sectionBlend+sectionBlend*limit/radLen);
+            vertex.copy(center).add(radial).applyMatrix4(toMesh).lerp(baseVertex,1-amount);
+            p.setXYZ(i,vertex.x,vertex.y,vertex.z);
+          }
         }
         p.needsUpdate=true;r.geometry.computeVertexNormals();r.dirty=amount>0;
-        /* frustumCulled=false and raycast disabled by cx_hands: no per-frame bounds needed. */
       });
     }
-    function wrapper(){
-      var out=previous.apply(this,arguments);
-      if(!tether.stopped&&!state.stopped)update(arguments[1]);
-      return out;
-    }
+    function wrapper(){var out=previous.apply(this,arguments);if(!tether.stopped&&!state.stopped)update(arguments[1]);return out;}
     A.custom=wrapper;state.wrapper=wrapper;state.result.uninstall=uninstallAll;
-    tether.result={ok:true,disable:disable,elbowCamera:xyz.slice(),limits:'Sleeve-only camera tether; rigid cup reload grip remains unchanged'};
+    tether.result={ok:true,version:3,disable:disable,elbowCamera:xyz.slice(),limits:'Sleeve sweep only; reload grip fingers unchanged'};
     state.cxSleeveTether=tether;
-    /* Parent API cxUninstallHands closes over restore(), bypassing result.uninstall.
-     * Compose that explicit API once so private materials are cleaned as well.
-     */
     if(!global.cxUninstallHands.cxSleeveAware){
       var uninstall=global.cxUninstallHands;
-      var uninstallWrapped=function(weapon){
-        var s=weapon&&weapon.userData&&weapon.userData.cxHands;
-        if(s&&s.cxSleeveTether)s.cxSleeveTether.result.disable();
-        return uninstall(weapon);
-      };
-      uninstallWrapped.cxSleeveAware=true;global.cxUninstallHands=uninstallWrapped;
+      var combined=function(weapon){var s=weapon&&weapon.userData&&weapon.userData.cxHands;if(s&&s.cxSleeveTether)s.cxSleeveTether.result.disable();return uninstall(weapon);};
+      combined.cxSleeveAware=true;global.cxUninstallHands=combined;
     }
     return tether.result;
   }
   global.cxEnableRevolverSleeveTether=enable;
 })(typeof window!=='undefined'?window:globalThis);
+
 /* =====================================================
    BALIZA SENUELO  (equipo 'decoy', tecla B / boton #decoy; sale de la caja misteriosa)
    - se lanza como la granada (mas lenta), al quedarse quieta (o a los 2.5 s) se despliega: sube la antena, luz que pulsa
@@ -14897,7 +14953,7 @@ var DCY={on:false,t:0,rel:false,pool:[]};
       HG.visible=true;pose(0);
       swAnim=Math.max(swAnim,.9);reloading=0;adsOn=false;
     },
-    give:function(){EQ.decoy=EQ.decoyMax;wpkHud();notice('Baliza Señuelo','Lánzala con B: atrae a los zombis y explota');}
+    give:function(){EQ.decoy=EQ.decoyMax;wpkHud();notice('Baliza Señuelo',(coarseUI?'Lánzala con el botón Baliza':'Lánzala con B')+': atrae a los zombis y explota');}
   };
 })();
 /* =====================================================
@@ -15684,7 +15740,9 @@ var RVL={dbg:null,v:null};
     function undo(){moved.forEach(function(o){if(o.parent)o.parent.remove(o);});XS=null;}
     function kids(src,dst){src.children.slice().forEach(function(c){if(skip.indexOf(c)>=0)return;dst.add(c);moved.push(c);});}
     try{
-      kids(N.crane,CR);kids(N.cylinder,CYL);kids(N.hammer,HM);kids(N.ejector,ER);kids(N.trigger,TR);kids(N.speedloader,SL);
+      /* martillo: el GLB viene con giro 0 y HM reposa en -.20; un grupo intermedio a +.20 lo deja como en sus renders (correccion de Codex) */
+      var HMV=new THREE.Group();HMV.rotation.x=.20;HM.add(HMV);moved.push(HMV);
+      kids(N.crane,CR);kids(N.cylinder,CYL);kids(N.hammer,HMV);kids(N.ejector,ER);kids(N.trigger,TR);kids(N.speedloader,SL);
       for(j=0;j<6;j++)kids(N['round_'+j],RB[j]);
       if(N.extractor_star){CYL.add(N.extractor_star);moved.push(N.extractor_star);XS=N.extractor_star;}
     }catch(e){undo();throw e;}
@@ -15786,6 +15844,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.
     m.onBeforeCompile=vmShader;
     m.customProgramCacheKey=function(){return 'vmg';};
     /* Forja Lunar: la misma malla con la textura viva de la Forja encima (setPap cambia a userData.pap) */
+    if(VM_HAND[m.name]){m.needsUpdate=true;return m;}   /* guantes, mangas y punos embebidos en el GLB (M1911): la Forja solo viste el arma */
     var p=m.clone();p.userData={vmg:true};p.color.multiplyScalar(.55);p.emissive=new THREE.Color(0xffffff);p.emissiveMap=papTex;p.emissiveIntensity=.6;
     p.onBeforeCompile=vmShader;p.customProgramCacheKey=function(){return 'vmg';};m.userData.pap=p;
     m.needsUpdate=true;return m;
@@ -15794,6 +15853,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.
   /* KIT DE MATERIALES DE ARMAS (models/kit/kit.json): los GLB de armas no traen texturas; cada material se llama wk_*
      y aqui recibe las texturas repetibles compartidas (un solo juego para todas las armas). */
   var KITP=null,KITT={};
+  var DULL=/^saddle_(head|hull)_/;   /* piezas que se apagan: cartuchos del portacartuchos lateral de la escopeta */
   var KIT_ADJ={wk_wood:.5,wk_bakelite:.65,wk_steel_bare:.6};   /* calibrado en escena: bajo la luz roja de la base la madera y el acero pulido saltaban demasiado */
   function kitTex(file,srgb){
     if(!file)return null;
@@ -15877,6 +15937,21 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.
     });
     list.forEach(function(o){var d=new THREE.Mesh(o.geometry,m);d.userData.vmOcc=true;d.renderOrder=OCC_ORDER;d.frustumCulled=false;d.raycast=function(){};o.add(d);});
   }
+  /* RESPALDO si la biblioteca de manos no carga o falla sobre un arma que ya tiene GLB: las manos procedurales siguen ahi,
+     pero se pintan sin profundidad DESPUES del modelo y lo taparian entero. Se les da profundidad normal y el mismo
+     sombreador del arma en mano, para que queden donde les toca (aspecto viejo, pero correcto). Con arma procedural no
+     hace falta nada: todo sigue pintandose en su orden de siempre. */
+  function handsFallback(type,g,N){
+    if(!N||!VMG.ok[type]||(N.hand_r||N.hand_l))return;
+    var seen=[];
+    g.traverse(function(o){
+      if(!o.isMesh||!o.userData.vmHand||!o.visible)return;
+      var m=o.material;if(!m||Array.isArray(m))return;
+      if(!m.userData.vmFb){var c=m.clone();c.userData={vmFbOf:m};c.depthTest=true;c.depthWrite=true;c.onBeforeCompile=vmShader;c.customProgramCacheKey=function(){return 'vmg';};m.userData.vmFb=c;}
+      o.material=m.userData.vmFb;o.renderOrder=90;seen.push(o);
+    });
+    VMG.handsFb=VMG.handsFb||{};VMG.handsFb[type]=seen.length;
+  }
   /* MANOS de la biblioteca: N = nodos del GLB instalado, o null = el arma se queda procedural. Una sola vez por arma. */
   var handsAsked={};
   function hands(type,N){
@@ -15887,7 +15962,8 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.
       if(pr&&typeof pr.then==='function')pr.then(function(r){
         VMG.hands[type]=r&&r.ok?'ok':String(r&&r.reason||'?');
         if(r&&r.ok&&!N){try{occlude(g);}catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}}
-      },function(){VMG.hands[type]='error';});
+        if(!(r&&r.ok))handsFallback(type,g,N);
+      },function(){VMG.hands[type]='error';handsFallback(type,g,N);});
     }catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}
   }
   function install(type,gltf){
@@ -15902,6 +15978,10 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.
       if(!o.isMesh)return;o.frustumCulled=false;o.renderOrder=90;o.raycast=function(){};
       if(Array.isArray(o.material))o.material=o.material.map(vmMat);else o.material=vmMat(o.material);
       (Array.isArray(o.material)?o.material:[o.material]).forEach(kitApply);
+      if(DULL.test(o.name)&&!Array.isArray(o.material)){var dm=o.material.userData.dull;
+        if(!dm){dm=vmMat(o.material.clone());dm.name=o.material.name+'_dull';dm.userData.kit=true;dm.userData.vmg=true;o.material.userData.dull=dm;
+          (function(src,dst){(KITP||Promise.resolve()).then(function(){setTimeout(function(){dst.color.copy(src.color).multiplyScalar(.38);dst.emissive.copy(dst.color).multiplyScalar(.08);dst.roughness=Math.max(.7,src.roughness||0);dst.metalness=Math.min(.35,src.metalness||0);dst.envMapIntensity=.1;dst.needsUpdate=true;},0);});})(o.material,dm);}
+        o.material=dm;}
     });
     var old=[],moved=[],xundo=null,fx=VMFX[type],kept=[],fxUndo=[],fl=g.userData.flash,keep={fp:fl.position.clone(),mz:g.userData.mz.clone(),ads:g.userData.ads,eye:g.userData.adsEye,post:A.post};
     /* si el GLB no trae manos, las manos y mangas procedurales (userData.vmHand) se quedan */
@@ -16696,7 +16776,7 @@ function update(dt){
   var cw=curW(),rf=reloading>0?clamp(1-reloading/rlTot,0,1):-1;
   var rl=reloading>0?Math.sin(rf*Math.PI):0,ad=gunModels[cw.type].userData.ads||{x:0,y:-.15,z:-.3},nh=1-adsA;
   var bx=Math.sin(bob*.5)*.007*im*nh,by=Math.abs(Math.sin(bob))*.009*im*nh;
-  vm.position.set(lerp(.17+VMP.x*nh,ad.x,adsA)+bx+swayX-sprA*.05,lerp(-.19+VMP.y*nh,ad.y,adsA)-rl*.16-swAnim*.3+by+swayY-sprA*.05-landDip*.3,lerp(-.38+VMP.z*nh,ad.z,adsA)+recoil*.05+sprA*.03);
+  vm.position.set(lerp(.17+VMP.x*nh,ad.x,adsA)+bx+swayX-sprA*.05,lerp(-.19+VMP.y*nh,ad.y,adsA)-rl*.16-swAnim*.3+by+swayY-sprA*.05-landDip*.3,lerp(-.38+VMP.z*nh,ad.z,adsA)+recoil*.05+sprA*.03-rl*(VM_RLPUSH[cw.type]||0));
   vm.rotation.set(recoil*.12+rl*.7+swayY*.6-sprA*.25+(slideT>0?.15:0)+VMP.rx*nh,swayX*.6+sprA*.6+VMP.ry*nh,rl*.25+sprA*.38+(slideT>0?.25:0)+VMP.rz*nh);
   animGun(cw,rf,dt);
   wpkTick(dt);   /* paquete de armas: lanzados, explosiones, senuelos */

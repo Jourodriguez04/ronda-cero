@@ -13686,6 +13686,8 @@ var ROOM3D_DEF=[{ri:0,base:'../rooms/hangar',label:'Hangar'},{ri:1,base:'../room
 ===================================================== */
 var WX={},WXSND={},WXNET={},WPK_TICK=[],WPK_RESET=[];
 var EQ={gren:2,grenMax:4,decoy:0,decoyMax:3};
+/* encuadre del arma en mano: desplazamiento y giro que se SUMAN a la pose de cadera (0 al apuntar: la mira no se mueve) */
+var VMP={x:.04,y:.06,z:0,rx:0,ry:-.10,rz:.06};   /* mas alta, mas plana y menos girada: lectura tipo BO2 */
 var wpkBusy=0;            // >0: manos ocupadas (cuchillazo / lanzamiento): no se dispara ni se recarga
 var THROWN=[],DECOYS=[];
 
@@ -15238,6 +15240,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   });
   wpkHud();
 })();
+var decorTick=decorTick||[];
 var clock=new THREE.Clock();
 var dmgEl=$('dmg');
 function gameOver(){
@@ -15551,8 +15554,8 @@ function update(dt){
   var cw=curW(),rf=reloading>0?clamp(1-reloading/rlTot,0,1):-1;
   var rl=reloading>0?Math.sin(rf*Math.PI):0,ad=gunModels[cw.type].userData.ads||{x:0,y:-.15,z:-.3},nh=1-adsA;
   var bx=Math.sin(bob*.5)*.007*im*nh,by=Math.abs(Math.sin(bob))*.009*im*nh;
-  vm.position.set(lerp(.17,ad.x,adsA)+bx+swayX-sprA*.05,lerp(-.19,ad.y,adsA)-rl*.16-swAnim*.3+by+swayY-sprA*.05-landDip*.3,lerp(-.38,ad.z,adsA)+recoil*.05+sprA*.03);
-  vm.rotation.set(recoil*.12+rl*.7+swayY*.6-sprA*.25+(slideT>0?.15:0),swayX*.6+sprA*.6,rl*.25+sprA*.38+(slideT>0?.25:0));
+  vm.position.set(lerp(.17+VMP.x*nh,ad.x,adsA)+bx+swayX-sprA*.05,lerp(-.19+VMP.y*nh,ad.y,adsA)-rl*.16-swAnim*.3+by+swayY-sprA*.05-landDip*.3,lerp(-.38+VMP.z*nh,ad.z,adsA)+recoil*.05+sprA*.03);
+  vm.rotation.set(recoil*.12+rl*.7+swayY*.6-sprA*.25+(slideT>0?.15:0)+VMP.rx*nh,swayX*.6+sprA*.6+VMP.ry*nh,rl*.25+sprA*.38+(slideT>0?.25:0)+VMP.rz*nh);
   animGun(cw,rf,dt);
   wpkTick(dt);   /* paquete de armas: lanzados, explosiones, senuelos */
   var fovT=BASE_FOV-adsA*17+sprA*7+(slideT>0?10:0)+Math.min(kick*40,3);

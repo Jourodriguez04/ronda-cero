@@ -4350,13 +4350,83 @@ var panelWall=cTex(256,256,function(x,w,h){
   x.fillStyle='rgba(0,0,0,.7)';x.fillRect(0,0,3,h);x.fillStyle='rgba(255,255,255,.1)';x.fillRect(3,0,1,h);
   x.fillStyle='rgba(0,0,0,.55)';[[14,.2],[14,.58],[w-14,.2],[w-14,.58]].forEach(function(p){x.beginPath();x.arc(p[0],h*p[1],2.4,0,7);x.fill();});
 });
-/* regolito: gris suave con craterillos de borde claro, sin granulado duro */
-var regoTex=cTex(256,256,function(x,w,h){
-  x.fillStyle='#8f8c86';x.fillRect(0,0,w,h);
-  softStains(x,w,h,10,'60,58,54',.22,20,60);softStains(x,w,h,6,'200,196,188',.12,20,50);fineGrain(x,w,h,2200,.08);
-  for(var i=0;i<10;i++){var cx=trnd()*w,cy=trnd()*h,r=4+trnd()*16;
-    var g=x.createRadialGradient(cx,cy,r*.15,cx,cy,r);g.addColorStop(0,'rgba(40,38,36,.35)');g.addColorStop(.7,'rgba(40,38,36,.08)');g.addColorStop(.86,'rgba(230,226,216,.22)');g.addColorStop(1,'rgba(40,38,36,0)');
-    x.fillStyle=g;x.fillRect(cx-r,cy-r,r*2,r*2);}
+/* ---- exteriores (regolito, roca, variacion a gran escala): PRNG y ruido propios, no tocan trnd ---- */
+function exRnd(seed){var s=(seed>>>0)||1;return function(){s=(Math.imul(s,1664525)+1013904223)>>>0;return s/4294967296;};}
+function exNoise(seed,Px,Py){   /* ruido de valor periodico: Px x Py celdas por tile */
+  var r=exRnd(seed),T=[],i;for(i=0;i<Px*Py;i++)T.push(r());
+  return function(x,y){
+    var xi=Math.floor(x),yi=Math.floor(y),fx=x-xi,fy=y-yi;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+    var x0=((xi%Px)+Px)%Px,y0=((yi%Py)+Py)%Py,x1=(x0+1)%Px,y1=(y0+1)%Py;
+    var a=T[y0*Px+x0],b=T[y0*Px+x1],c=T[y1*Px+x0],d=T[y1*Px+x1];
+    return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy;};
+}
+function exFbm(seed,Px,Py,oct){   /* u,v en [0,1): periodico en el tile */
+  var ns=[],i;for(i=0;i<oct;i++)ns.push(exNoise(seed+i*131,Px<<i,Py<<i));
+  return function(u,v){var s=0,a=1,t=0;for(var i=0;i<oct;i++){s+=a*ns[i](u*(Px<<i),v*(Py<<i));t+=a;a*=.5;}return s/t;};
+}
+function exPix(x,w,h,fn){   /* fn(u,v,px,py) -> [r,g,b] 0..255 */
+  var im=x.createImageData(w,h),d=im.data,i=0,px,py;
+  for(py=0;py<h;py++)for(px=0;px<w;px++){var c=fn(px/w,py/h,px,py);d[i++]=c[0];d[i++]=c[1];d[i++]=c[2];d[i++]=255;}
+  x.putImageData(im,0,0);
+}
+function exWrap(w,fn){fn(0,0);fn(-w,0);fn(w,0);fn(0,-w);fn(0,w);fn(-w,-w);fn(w,w);fn(-w,w);fn(w,-w);}
+/* regolito: carbon grisaceo; el grano y las piedrecillas solo aparecen en zonas "movidas", hay zonas lisas de reposo (tile de 8 m, 512 px) */
+var regoTex=cTex(512,512,function(x,w,h){
+  var big=exFbm(11,3,3,4),mid=exFbm(23,10,10,3),rest=exFbm(29,2,2,3),R=exRnd(5),i;
+  function act(u,v){var t=(rest(u,v)-.34)/.3;return t<0?0:t>1?1:t*t*(3-2*t);}   /* 0 = liso, 1 = grano y piedrecillas */
+  exPix(x,w,h,function(u,v,px,py){
+    var A=act(u,v),b=big(u,v),m=mid(u,v),g=R();
+    var L=.27+.17*b+.05*(m-.5)*(.3+A)+.04*A*(g-.5)+.008*(g-.5);
+    return [L*258,L*256,L*252];
+  });
+  /* craterillos de tamanos y bordes distintos (pocos: los grandes van pintados aparte) */
+  var CR=[[40,.5],[26,.35],[17,.3],[11,.4],[9,.25],[6,.4],[5,.3]];
+  CR.forEach(function(c){var cx=R()*w,cy=R()*h,r=c[0]*(.85+R()*.3),rim=c[1],asp=.8+R()*.4;
+    exWrap(w,function(ox,oy){
+      var X=cx+ox,Y=cy+oy;if(X<-r*2||Y<-r*2||X>w+r*2||Y>h+r*2)return;
+      var e=x.createRadialGradient(X,Y,r*.8,X,Y,r*1.8);e.addColorStop(0,'rgba(190,184,172,'+(rim*.4)+')');e.addColorStop(1,'rgba(190,184,172,0)');x.fillStyle=e;x.fillRect(X-r*2,Y-r*2,r*4,r*4);
+      var g=x.createLinearGradient(X+r*.7,Y+r*.7,X-r*.7,Y-r*.7);g.addColorStop(0,'rgba(10,10,12,'+(.25+rim)+')');g.addColorStop(.55,'rgba(20,20,22,.18)');g.addColorStop(1,'rgba(205,198,185,'+(rim*.6)+')');
+      x.fillStyle=g;x.beginPath();x.ellipse(X,Y,r,r*asp,0,0,7);x.fill();
+      x.strokeStyle='rgba(200,194,182,'+(rim*.9)+')';x.lineWidth=Math.max(1,r*.1);x.beginPath();x.ellipse(X,Y,r*1.02,r*asp*1.02,0,0,7);x.stroke();});
+  });
+  /* piedrecillas: solo donde hay actividad; la sombra cae hacia arriba a la izquierda del lienzo (sol rasante) */
+  for(i=0;i<140;i++){var px=R()*w,py=R()*h,pr=1+Math.pow(R(),3)*6,k=R()*.5;
+    if(act(px/w,py/h)<.55)continue;
+    exWrap(w,function(ox,oy){
+      var X=px+ox,Y=py+oy;if(X<-12||Y<-12||X>w+12||Y>h+12)return;
+      x.fillStyle='rgba(8,8,10,.5)';x.beginPath();x.ellipse(X-pr*.7,Y-pr*.55,pr*1.1,pr*.7,.6,0,7);x.fill();
+      x.fillStyle='rgba('+((62+k*70)|0)+','+((60+k*68)|0)+','+((56+k*62)|0)+',.95)';x.beginPath();x.ellipse(X,Y,pr,pr*.78,.6,0,7);x.fill();});
+  }
+});
+/* pared de roca basaltica MATE: macroformas grandes (estratos anchos y bloques) y un detalle fino discreto; sin relieve.
+   El shader la usa a mitad de escala (16 x 7.2 m por tile) para que no se note la repeticion */
+var exWallTex=cTex(512,512,function(x,w,h){
+  var R=exRnd(9),mac=exFbm(31,3,2,3),wp=exNoise(41,4,1),jt=exNoise(43,6,6),fin=exFbm(67,28,28,2),NB=5,i,band=[];
+  for(i=0;i<NB;i++)band.push({t:(R()-.5)*.11,k:2+((R()*4)|0),o:R(),jo:R()*6});
+  exPix(x,w,h,function(u,v){
+    var vv=v*NB+wp(u*4,0)*.55-.2,bi=Math.floor(vv),fb=vv-bi,B=band[((bi%NB)+NB)%NB];
+    var bu=u*B.k+B.o+(jt(u*6,v*6)-.5)*.12,bj=Math.floor(bu),fj=bu-bj;
+    var bt=(((bj*7+bi*13)%11)/11-.5)*.07;
+    var L=.27+.08*(mac(u,v)-.5)*2+B.t+bt+.04*(fin(u,v)-.5)+.02*(R()-.5);
+    if(fb<.06)L-=.07*(1-fb/.06);                                  /* junta de estrato */
+    if(Math.min(fj,1-fj)<.02)L-=.06;   /* junta vertical del bloque */
+    return [L*258,L*256,L*252];
+  });
+});
+/* piel de las rocas sueltas (se proyecta por el mundo, 1.5 m por tile) */
+var exRockTex=cTex(256,256,function(x,w,h){
+  var bl=exFbm(81,5,5,4),crk=exFbm(91,9,9,3),R=exRnd(3);
+  exPix(x,w,h,function(u,v){
+    var c=crk(u,v),crack=Math.abs(c-.5)<.018?1:0,m=bl(u,v);
+    var L=.62+.42*(m-.5)+.12*(R()-.5)-.30*crack;
+    return [L*258,L*254,L*246];
+  });
+});
+/* variacion de brillo a gran escala (se muestrea en coordenadas del mundo con otra escala) */
+var exVarTex=cTex(128,128,function(x,w,h){
+  var f=exFbm(101,3,3,3),mn=1,mx=0,i,j,a=[];
+  for(j=0;j<h;j++)for(i=0;i<w;i++){var t=f(i/w,j/h);a.push(t);if(t<mn)mn=t;if(t>mx)mx=t;}
+  exPix(x,w,h,function(u,v,px,py){var t=(a[py*w+px]-mn)/(mx-mn)*255;return [t,t,t];});
 });
 /* techo: placas con rejillas de ventilacion */
 var ceilTex=cTex(128,128,function(x,w,h){
@@ -4385,6 +4455,18 @@ starTex.wrapS=starTex.wrapT=THREE.ClampToEdgeWrapping;
 function mat(map,color,bump,spec,sh){
   return new THREE.MeshPhongMaterial({map:map,color:color,bumpMap:(map&&bump)?map:null,bumpScale:bump||0,specular:spec||0x15191c,shininess:sh||10});
 }
+/* materiales de exterior: leve relleno de luz de la Tierra (la sombra nunca queda negra) y un moteado de gran escala por coordenadas del mundo */
+function exMoonMat(m,k,us){
+  m.emissive=new THREE.Color(us<1?0x1b1f28:0x0d1016);   /* paredes: la cara a la sombra no queda negra (luz de la Tierra) */
+  m.onBeforeCompile=function(sh){
+    sh.uniforms.tVar={value:exVarTex};
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;').replace('#include <begin_vertex>','#include <begin_vertex>\nvWP=(modelMatrix*vec4(transformed,1.)).xyz;');
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying vec3 vWP;\nuniform sampler2D tVar;')
+      .replace('#include <map_fragment>','#ifdef USE_MAP\ndiffuseColor*=texture2D(map,vUv*'+(us||1).toFixed(2)+');\nvec2 qv=vWP.xz;float vA=texture2D(tVar,qv*.0113+vec2(.37,.11)).r,vB=texture2D(tVar,qv*.043).r;diffuseColor.rgb*=mix(1.-.30*'+k.toFixed(2)+',1.+.22*'+k.toFixed(2)+',vA*.65+vB*.35);\n#endif');
+  };
+  m.customProgramCacheKey=function(){return 'exmoon'+k+'_'+(us||1);};
+  return m;
+}
 /* cada sala tiene su estilo: piso, pared, techo y color de lampara */
 var STY={
   hangar:{f:mat(panelFloor,0xb4bcc2,.35,0x46525a,38),w:mat(panelWall,0xb8c2ca,.3,0x2a3238,18),c:mat(ceilTex,0x7a8590,.2),lamp:0xd8ecff},
@@ -4396,7 +4478,7 @@ var STY={
   tun:{f:mat(panelFloor,0x5a5450,.35,0x2a2420,20),w:mat(panelWall,0x6a5e58,.3,0x1a1614,10),c:mat(ceilTex,0x3a3430,.2),lamp:0xff5236},
   med:{f:mat(panelFloor,0xb8c4be,.35,0x46564e,40),w:mat(panelWall,0xc8d6cc,.3,0x2a3430,20),c:mat(ceilTex,0x7a8a82,.2),lamp:0xd4ffe2},
   puesto:{f:mat(panelFloor,0x6e6878,.35,0x3a3048,30),w:mat(panelWall,0x7e7690,.3,0x2a2438,16),c:mat(ceilTex,0x4a4458,.2),lamp:0xc49aff},
-  moon:{f:mat(regoTex,0xd8d4cc,.5,0x0c0c0c,3),w:mat(regoTex,0x9a958d,.5,0x0c0c0c,3),c:null,lamp:0xffffff}
+  moon:{f:exMoonMat(mat(regoTex,0xb4b0a8,.2,0x0c0c0c,3),.9,1),w:exMoonMat(mat(exWallTex,0xa29c92,0,0x0c0c0c,2),1,.5),c:null,lamp:0xffffff}
 };
 var lampMats={};
 function lampMat(c){return lampMats[c]||(lampMats[c]=new THREE.MeshBasicMaterial({color:c}));}
@@ -7825,7 +7907,7 @@ var mP=new THREE.MeshPhongMaterial({vertexColors:true,specular:0x30383e,shinines
 var mPDS=new THREE.MeshPhongMaterial({vertexColors:true,specular:0x30383e,shininess:28,side:THREE.DoubleSide});
 var mE=em(0xffffff,0xb83020,{vertexColors:true});
 var mE2=new THREE.MeshBasicMaterial({vertexColors:true});
-var mRockF=new THREE.MeshPhongMaterial({vertexColors:true,specular:0x0a0a0a,shininess:3,flatShading:true});
+var mRockF=new THREE.MeshPhongMaterial({vertexColors:true,map:exRockTex,bumpMap:exRockTex,bumpScale:.6,specular:0x0a0a0a,shininess:3,flatShading:true,emissive:0x0c0e12});
 var mPool=em(0xffffff,0x8a1c10,{vertexColors:true,map:radialTex('rgba(255,255,255,.42)','rgba(255,255,255,.13)'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});
 function ph(c){return C(mP,c);}
 var mSteel=ph(0x8b959c),mSteelD=ph(0x394148),mTrimD=ph(0x2b3136),mWhite=ph(0xd0cdc4),mOrange=ph(0xc85a18),mRubber=ph(0x1a1b1d),mGlass=ph(0x152530),
@@ -8321,16 +8403,124 @@ function pulseMat(hex,op,tex){var m=new THREE.MeshBasicMaterial({color:hex,trans
 /* marco de pared en coordenadas de mundo: (x,z) sobre el plano de la pared; dir = lado de la pared (como wallF) */
 function WFp(x,z,dir,y){var v=DV[dir],nx=-v[0],nz=-v[1],ry=Math.atan2(nx,nz);return {x:x,z:z,nx:nx,nz:nz,ry:ry,tx:Math.cos(ry),tz:-Math.sin(ry),y:y||0};}
 /* ---------- rocas ---------- */
+/* roca basaltica: icosaedro con cortes planos (caras quebradas) + ruido en varias escalas; sin indice (normales por cara).
+   Atributo 'sh' = sombreado por vertice (mas oscuro en los cortes y hendiduras) */
+function rkn(v,s,f){return Math.sin(v.x*f+s)*Math.cos(v.y*f*1.3+s*1.7)*Math.sin(v.z*f*1.1+s*.7+v.x*f*.4);}
 function rockGeo(seed,det){
-  var g=new THREE.IcosahedronGeometry(1,det),p=g.attributes.position,i,v=new THREE.Vector3();
-  for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i);var h=Math.sin(v.x*3.1+seed)*Math.cos(v.y*2.7+seed*1.7)*Math.sin(v.z*3.3+seed*.7);
-    var k=1+h*.28+Math.sin((v.x+v.z)*5+seed)*.06;p.setXYZ(i,v.x*k,v.y*k*(v.y<0?.55:1),v.z*k);}
+  var g=new THREE.IcosahedronGeometry(1,det),p=g.attributes.position,n=p.count,i,k,v=new THREE.Vector3(),pl=[],np=det>=2?9:det===1?7:5,sh=new Float32Array(n);
+  var s0=Math.floor(seed*1000)+7;function rr(){s0=(s0*16807)%2147483647;return (s0-1)/2147483646;}
+  for(k=0;k<np;k++){var a=rr()*6.283,b=Math.asin(rr()*1.7-.85),cb=Math.cos(b);pl.push([cb*Math.cos(a),Math.sin(b),cb*Math.sin(a),.64+rr()*.3]);}
+  for(i=0;i<n;i++){
+    v.fromBufferAttribute(p,i).normalize();
+    var r=1+.2*rkn(v,seed,2.4)+.08*rkn(v,seed+3,5.7)+(det>=1?.035*rkn(v,seed+9,13):0),cut=0;
+    for(k=0;k<np;k++){var d=v.x*pl[k][0]+v.y*pl[k][1]+v.z*pl[k][2];if(d>.02&&pl[k][3]/d<r){r=pl[k][3]/d;cut=1;}}
+    var y=v.y*r*(v.y<0?.55:1);
+    p.setXYZ(i,v.x*r,y,v.z*r);
+    sh[i]=Math.max(.5,Math.min(1,.62+.5*(r-.55)))*(cut?.93:1);
+  }
+  g.setAttribute('sh',new THREE.BufferAttribute(sh,1));
   g.computeVertexNormals();return g;
 }
 var RG4=[rockGeo(1,1),rockGeo(2.3,1),rockGeo(4.1,1),rockGeo(5.7,0),rockGeo(7.3,0)];
-var RKM=[0x8e8a82,0x6f6b64,0x5e5a54,0x7b766d,0x4f4c47,0x857f74].map(function(h){return C(mRockF,h);});
-function rockP(x,y,z,sx,sy,sz,col,ry,gi){var big=Math.max(sx,sz)>.9;put(RKM[col!==undefined?col:((sr()*RKM.length)|0)],RG4[gi!==undefined?gi:((sr()*(big?3:RG4.length))|0)],x,y,z,sx,sy,sz,sR(-.3,.3),ry!==undefined?ry:sR(0,6.28),sR(-.3,.3));}
-function rock(x,z,s,sy,col,obs,yo){rockP(x,floorAt(x,z)+s*sy*.25+(yo||0),z,s*sR(.85,1.2),s*sy,s*sR(.85,1.2),col);if(obs)addObs(s*1.5,s*sy*.9,s*1.5,x,z);}
+var RGH=[rockGeo(11,2),rockGeo(12.4,2),rockGeo(13.9,2)];   /* rocas grandes del piso: mas caras */
+var RKM=[0x403d39,0x363431,0x2e2d2a,0x3b3832,0x262524,0x403b33].map(function(h){return C(mRockF,h);});
+/* como put(), pero con color por vertice multiplicado por 'sh', mas claro arriba (polvo) y UV proyectados por el mundo */
+var RSKIP=false;   /* consume los mismos sr() pero no dibuja (para no alterar el resto del azar) */
+function putR(m,geo,x,y,z,sx,sy,sz,rx,ry,rz,tile){
+  if(RSKIP)return;
+  _eu.set(rx||0,ry||0,rz||0,'YXZ');_q.setFromEuler(_eu);_ps.set(x,y,z);_sc.set(sx,sy,sz);_m4.compose(_ps,_q,_sc);_n3.getNormalMatrix(_m4);
+  var col=m.col,e=_m4.elements,b=DBget(m.base,e[12],e[14]),o=b.p.length/3,P=geo.attributes.position,N=geo.attributes.normal,SH=geo.attributes.sh,i;
+  for(i=0;i<P.count;i++){
+    _v.fromBufferAttribute(P,i).applyMatrix4(_m4);b.p.push(_v.x,_v.y,_v.z);
+    _vn.fromBufferAttribute(N,i).applyMatrix3(_n3).normalize();b.n.push(_vn.x,_vn.y,_vn.z);
+    var k=SH.getX(i)*(.86+.16*Math.max(0,_vn.y));b.c.push(col.r*k,col.g*k,col.b*k);
+    var ax=Math.abs(_vn.x),ay=Math.abs(_vn.y),az=Math.abs(_vn.z);
+    if(ay>=ax&&ay>=az)b.u.push(_v.x/1.5,_v.z/1.5);else if(ax>=az)b.u.push(_v.z/1.5,_v.y/1.5);else b.u.push(_v.x/1.5,_v.y/1.5);
+    b.i.push(o+i);
+  }
+}
+function rockP(x,y,z,sx,sy,sz,col,ry,gi,hero){var big=Math.max(sx,sz)>.9;var cm=RKM[col!==undefined?col:((sr()*RKM.length)|0)],gj=gi!==undefined?gi:((sr()*(big?3:RG4.length))|0);putR(cm,(hero&&gj<3)?RGH[gj]:RG4[gj],x,y,z,sx,sy,sz,sR(-.3,.3),ry!==undefined?ry:sR(0,6.28),sR(-.3,.3));}
+var EXT=false;   /* dentro de las salas exteriores: las rocas del piso dejan su sombra pintada */
+function rock(x,z,s,sy,col,obs,yo){var sx_=s*sR(.85,1.2),sz_=s*sR(.85,1.2);rockP(x,floorAt(x,z)+s*sy*.1+(yo||0),z,sx_,s*sy,sz_,col,undefined,undefined,s>=.7);if(obs)addObs(s*1.5,s*sy*.9,s*1.5,x,z);if(EXT&&!RSKIP&&s>=.2)rkShadow(x,z,Math.max(sx_,sz_),s*sy*1.1);}
+/* =====================================================
+   KIT DE EXTERIORES: marcas pintadas en el suelo (sombras largas del sol rasante, rodadas, huellas, polvo claro en bordes
+   de crater, oscurecimiento en la base de los muros, flechas ambar) con un solo material y un atlas de 512 px.
+   El sol sale de (-x,+z): las sombras caen hacia (+x,-z).  PRNG propio (xr): no altera la secuencia sr() del resto.
+===================================================== */
+var _xs=17;function xr(){_xs=(_xs*16807)%2147483647;return (_xs-1)/2147483646;}
+function xR(a,b){return a+(b-a)*xr();}
+var EXR={shd:[0,0,256,128],blob:[256,0,128,128],rim:[384,0,128,128],rut:[0,128,128,256],foot:[128,128,128,128],peb:[256,128,128,128],aoB:[384,128,128,128],road:[256,256,128,256],arrow:[128,256,128,128]};
+var exAtlas=(function(){
+  var c=canvasTex(512,512),x=c.getContext('2d'),sm=function(a,b,t){t=Math.max(0,Math.min(1,(t-a)/(b-a)));return t*t*(3-2*t);};
+  function cell(k,fn){var r=EXR[k],im=x.createImageData(r[2],r[3]),d=im.data,i=0,px,py;
+    for(py=0;py<r[3];py++)for(px=0;px<r[2];px++){var a=fn(px/(r[2]-1),py/(r[3]-1),px,py);d[i++]=255;d[i++]=255;d[i++]=255;d[i++]=Math.max(0,Math.min(255,a*255))|0;}
+    x.putImageData(im,r[0],r[1]);}
+  /* sombra: nace en el pie del objeto (izquierda), se afina y se desvanece */
+  cell('shd',function(u,v){var w=1-.4*u,cc=Math.abs(v-.5)*2/w;return .64*(1-sm(.5,1,cc))*(1-sm(.15,1,u))*sm(0,.04,u+.02);});
+  cell('blob',function(u,v){var r=Math.hypot(u-.5,v-.5)*2;return .55*Math.exp(-r*r*3.2)*(1-sm(.82,1,r));});
+  cell('rim',function(u,v){var r=Math.hypot(u-.5,v-.5)*2,an=Math.atan2(v-.5,u-.5),m=.7+.3*Math.sin(an*3+1)*Math.sin(an*5+2);return (.5*Math.exp(-Math.pow((r-.74)/.15,2))*m+.1*(1-sm(.5,.74,r)))*(1-sm(.9,1,r));});
+  cell('rut',function(u,v){var g=Math.exp(-Math.pow((u-.2)/.06,2))+Math.exp(-Math.pow((u-.8)/.06,2)),t=.7+.3*Math.sin(v*6.2832*16),dr=.7+.3*Math.sin(v*6.2832*3+u*5);return .55*g*t*dr;});
+  cell('road',function(u,v){var e=sm(0,.28,u)*(1-sm(.72,1,u)),m=.82+.18*Math.sin(v*6.2832*2+u*7);return .5*e*m;});
+  cell('aoB',function(u,v){return .58*Math.pow(1-v,1.8);});
+  cell('peb',function(u,v){var a=0,i;for(i=0;i<16;i++){var cx=(Math.sin(i*12.9898)*.5+.5)*.8+.1,cy=(Math.sin(i*78.233+1)*.5+.5)*.8+.1,r=.015+.03*(Math.sin(i*37.7)*.5+.5),d=Math.hypot(u-cx+.02,v-cy+.02);a=Math.max(a,.7*(1-sm(r*.6,r,d)));}return a;});
+  /* bota: suela con huella de dibujo */
+  var f=EXR.foot;x.save();x.translate(f[0],f[1]);x.fillStyle='rgba(255,255,255,.8)';
+  x.beginPath();x.ellipse(64,44,22,36,0,0,7);x.fill();x.beginPath();x.ellipse(64,98,15,18,0,0,7);x.fill();
+  x.globalCompositeOperation='destination-out';x.fillStyle='rgba(0,0,0,.7)';for(var q=0;q<7;q++)x.fillRect(38,18+q*9,52,3);x.fillRect(46,74,36,5);x.restore();
+  var ar=EXR.arrow;x.save();x.translate(ar[0],ar[1]);x.fillStyle='rgba(255,255,255,.88)';
+  x.beginPath();x.moveTo(64,6);x.lineTo(116,66);x.lineTo(116,98);x.lineTo(64,40);x.lineTo(12,98);x.lineTo(12,66);x.closePath();x.fill();
+  x.globalCompositeOperation='destination-out';for(q=0;q<90;q++){x.fillStyle='rgba(0,0,0,'+(.25+xr()*.5)+')';x.beginPath();x.arc(xr()*128,xr()*128,.5+xr()*2,0,7);x.fill();}x.restore();
+  var t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;
+})();
+var mExt=new THREE.MeshPhongMaterial({vertexColors:true,map:exAtlas,transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3,polygonOffsetUnits:-3,specular:0x050505,shininess:2,emissive:0x0d1016});
+var mPoolA=new THREE.MeshBasicMaterial({vertexColors:true,map:mPool.map,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-4,polygonOffsetUnits:-4});   /* charco de luz que no depende de la energia */
+var eAmbS=C(mE2,0xffa422);
+var EXC={};function ec(h){return EXC[h]||(EXC[h]=C(mExt,h));}
+function exUV(k,flip){var u=AR(512,512,EXR[k]);return flip?[u[2],u[1],u[0],u[3]]:u;}
+var SUND=[.537,-.843],SUNRY=Math.atan2(.843,.537);
+function exD(k,hex,x,z,w,h,ry,lift,flip){quad(ec(hex),x,floorAt(x,z)+(lift||.03),z,w,h,-H_,ry||0,exUV(k,flip));}
+function rkShadow(x,z,rad,h){var len=Math.min(1.63*h,6)+rad*.4;exD('shd',0x000000,x+SUND[0]*(len/2-rad*.3),z+SUND[1]*(len/2-rad*.3),len,rad*1.7,SUNRY,.028);}
+/* franja oscura en la base de un muro: (x0,z0)->(x1,z1) a lo largo del muro, (nx,nz) hacia el interior */
+function aoStrip(x0,z0,x1,z1,nx,nz,wd){var L=Math.hypot(x1-x0,z1-z0);exD('aoB',0x000000,(x0+x1)/2+nx*wd/2,(z0+z1)/2+nz*wd/2,L,wd,Math.atan2(nx,nz),.027);}
+function pebble(x,z,s){putR(RKM[(xr()*6)|0],RG4[3+((xr()*2)|0)],x,floorAt(x,z)+s*.18,z,s*xR(.8,1.4),s*xR(.5,.8),s*xR(.8,1.4),xR(-.3,.3),xR(0,6.28),xR(-.3,.3));}
+function pebbles(x,z,r,n,s0,s1){for(var i=0;i<n;i++){var a=xr()*6.283,d=Math.sqrt(xr())*r,qx=x+Math.cos(a)*d,qz=z+Math.sin(a)*d;if(nearRt(qx,qz,2.2))continue;pebble(qx,qz,xR(s0,s1));}}
+/* crater pintado: interior oscuro, borde de polvo claro y piedrecillas de eyeccion */
+function exCrater(x,z,r,np){
+  var e=xR(.8,1.25),ry=xR(0,6.28),rim=[0x7a756b,0x8f897e,0xa59f93,0xb2ab9d][(xr()*4)|0],dk=xR(.06,.13);
+  exD('blob',(dk*255|0)*0x010101+0x040404,x,z,r*2.1*e,r*2.1/e,ry,.024);exD('blob',0x0a0a09,x-SUND[0]*r*.12,z-SUND[1]*r*.12,r*1.4*e,r*1.4/e,ry,.025);
+  if(xr()<.8)exD('rim',rim,x,z,r*xR(2.6,3.6)*e,r*xR(2.6,3.6)/e,ry,.026);
+  if(np)pebbles(x,z,r*1.5,np,.04,.11);
+}
+var ROUTES=[];
+function nearRt(x,z,d){for(var i=0;i<ROUTES.length;i++){var P=ROUTES[i];for(var j=0;j<P.length;j+=2)if(Math.abs(P[j][0]-x)<d&&Math.abs(P[j][1]-z)<d)return true;}return false;}
+/* camino de rodadas por una poligonal (spline suave); dos huellas de rueda por tramo */
+function exPath(pts,step){
+  var o=[],i,j,n=pts.length;
+  for(i=0;i<n-1;i++){var p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(n-1,i+2)],L=Math.hypot(p2[0]-p1[0],p2[1]-p1[1]),m=Math.max(1,Math.round(L/step));
+    for(j=0;j<m;j++){var t=j/m,t2=t*t,t3=t2*t;o.push([.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+      .5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)]);}}
+  o.push(pts[n-1]);return o;
+}
+function exRuts(pts,hex){
+  var P=exPath(pts,3.4),i;ROUTES.push(P);
+  for(i=0;i<P.length-1;i++){var a0=P[i],b0=P[i+1],dx0=b0[0]-a0[0],dz0=b0[1]-a0[1],L0=Math.hypot(dx0,dz0);if(L0<.2)continue;
+    exD('road',0x716d64,(a0[0]+b0[0])/2,(a0[1]+b0[1])/2,4.4,L0+.3,Math.atan2(-dx0,-dz0),.0255);}
+  for(i=0;i<P.length-1;i++){var a=P[i],b=P[i+1],dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz);if(L<.2)continue;
+    exD('rut',hex||0x0a0a09,(a[0]+b[0])/2,(a[1]+b[1])/2,2.6,L+.25,Math.atan2(-dx,-dz),.029);}
+  return P;
+}
+/* huellas de bota alternadas a lo largo de una poligonal */
+function exSteps(pts,gap,start){
+  var P=exPath(pts,1),acc=start||0,s=1,i;
+  for(i=0;i<P.length-1;i++){var a=P[i],b=P[i+1],dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz)||1;acc+=L;
+    if(acc>=gap){acc=0;s=-s;exD('foot',0x0b0b0a,a[0]-dz/L*.2*s,a[1]+dx/L*.2*s,.42,.42,Math.atan2(-dx,-dz)+xR(-.12,.12),.031,s<0);}}
+}
+function exArrow(x,z,dx,dz){exD('arrow',0xdfa326,x,z,1.0,1.4,Math.atan2(-dx,-dz),.032);}
+/* baliza ambar baja (sin colision): orienta el camino, no ocupa el carril */
+function beacon(x,z){
+  var fy=floorAt(x,z);cyl(mSteelD,x,fy+.4,z,.03,.8,6);bx(mSteelD,x,fy+.04,z,.2,.08,.2);bx(eAmbS,x,fy+.86,z,.12,.12,.12);
+  quad(C(mPoolA,0xffa23a),x,fy+.04,z,3.4,3.4,-H_,0);
+}
 /* masa de roca alta: rocas apiladas que se afinan hacia arriba; la base toca el piso */
 function cliff(x,z,w,h,y0,lean){
   var n=Math.max(2,Math.round(h/1.7)),i,lx=(lean||[0,0])[0],lz=(lean||[0,0])[1];
@@ -8365,14 +8555,27 @@ function rockWall(x0,z0,x1,z1,nx,nz,skip,hmin,hmax,o){
   while(t<L){
     var px=x0+dx*t,pz=z0+dz*t;r++;
     if(!(skip&&skip(px,pz))){
-      var y0=floorAt(px,pz),H=sR(hmin||6,hmax||9.5),i,yy;
+      var y0=floorAt(px,pz),H=sR(hmin||6,hmax||9.5),i,yy,mode=xr(),yb=mode<.7?4.6:99;   /* cresta baja sobre el borde del muro (4.6-6.4 m) o liso: nada que flote */
       for(i=0;;i++){
         yy=.6+i*1.35+sR(-.15,.15);if(yy>H)break;if(o.crown&&yy<5.2)continue;
         var a=sR(a0,a1),b=sR(.8,1.15),c=sR(.8,1.3),high=yy>5.0,p=high?sR(-.5,.3):sR(.1,pm),off=p-c*.9,al=t+((i+r)%2?.8:-.1)+sR(-.35,.35);
+        RSKIP=true;   /* las crestas flotaban sobre el muro: se consume el azar pero no se dibuja */
         rockP(x0+dx*al+nx*off,y0+yy,z0+dz*al+nz*off,a,b,c,undefined,wry+sR(-.15,.15),yy>4.4?3+((sr()*2)|0):((sr()*3)|0));
+        RSKIP=false;
       }
+      if(xr()<.8)footMass(px,pz,nx,nz,dx,dz);
     }
     t+=sR(1.5,2.0);
+  }
+}
+/* masa de rocas al pie del acantilado: hundidas en el piso, mismo gris, con su contacto y sombra pintada */
+function footMass(px,pz,nx,nz,dx,dz){
+  var n=3+((xr()*4)|0),j;
+  for(j=0;j<n;j++){
+    var up=j>=n-2&&n>=5,al=xR(-1.6,1.6),out=up?xR(.1,.35):xR(.15,.75)*(1-j*.06),s=xR(.45,.95)*(1.15-j*.07),x=px+dx*al+nx*out,z=pz+dz*al+nz*out,fy=floorAt(x,z);
+    putR(RKM[(xr()*6)|0],j===0?RGH[(xr()*3)|0]:RG4[(xr()*3)|0],x,fy+s*.2+(up?.55:0),z,s*xR(.95,1.4),s*xR(.6,1),s*xR(.95,1.4),xR(-.25,.25),xR(0,6.28),xR(-.25,.25));
+    if(s>.5)rkShadow(x,z,s,s*.9);
+    exD('blob',0x0a0a09,x,z,s*3.2,s*3.2,0,.025);
   }
 }
 var mClad=new THREE.MeshPhongMaterial({map:panelWall,color:0xd4d6d2,specular:0x333333,shininess:20});
@@ -8860,16 +9063,16 @@ doors.forEach(function(d){if(d.a===5||d.b===5)SPW.push([d.x,d.z]);});
 SPW.push([0,17],[54,17],[17,25.5]);
 function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z-SPW[i][1])<r)return false;return true;}
 (function(){
-  curRI=5;
+  curRI=5;EXT=true;
   var X0=-26,X1=46,Z0=16,Z1=36,i;
   /* rocas pequenas sueltas (sin colision) */
   for(i=0;i<120;i++){var x=sR(X0+1,X1-1),z=sR(Z0+1,Z1-1);if(!clearSp(x,z,2.6))continue;
-    if(z<18||z>34||x>46){} rock(x,z,sR(.12,.42),sR(.5,.9));}
+    RSKIP=xr()<.45;rock(x,z,sR(.12,.42),sR(.5,.9));RSKIP=false;}
   for(i=0;i<16;i++){var x2=sR(47,63),z2=sR(0,1)<.5?sR(16.3,17.8):sR(34.2,35.8);rock(x2,z2,sR(.12,.36),sR(.5,.9));}
   /* rocas medianas con colision, solo pegadas a los muros */
   [[-24.4,19.6,.9],[-24.6,33,1.0],[-10,34.8,.8],[6,34.9,.9],[29,34.8,1.0],[44.6,31,1.0],[-24.8,26.5,.7]].forEach(function(r){if(clearSp(r[0],r[1],3.2))rock(r[0],r[1],r[2],.8,undefined,true);});
   /* grandes rocas al pie de los bordes del mapa (rompen las paredes rectas) */
-  function edgeRock(x,z,nx,nz){var sz=sR(1.8,2.9);if(!clearSp(x+nx*1.5,z+nz*1.5,3.4))return;rock(x-nx*sz*.85,z-nz*sz*.85,sz,sR(.7,1.1),(sr()*3)|0);}
+  function edgeRock(x,z,nx,nz){var sz=sR(1.8,2.9);if(!clearSp(x+nx*1.5,z+nz*1.5,3.4))return;RSKIP=(nx===-1&&(z<21||z>31));rock(x-nx*sz*.85,z-nz*sz*.85,sz,sR(.7,1.1),(sr()*3)|0);RSKIP=false;}
   for(var bxs=X0+2;bxs<64;bxs+=sR(3.5,5.5)){if((bxs>-27&&bxs<-14)||(bxs>8&&bxs<20)||(bxs>-2&&bxs<2))continue;edgeRock(bxs,bxs>=42?Z1+2:Z1,0,-1);}   /* desde x=42 el anillo de Icaro ocupa una fila mas al sur */
   for(var bz=Z0+3;bz<Z1-1;bz+=sR(3.5,5)){edgeRock(X0,bz,1,0);if(bz>18&&bz<34&&(bz<22||bz>30))edgeRock(46,bz,-1,0);}
   /* revestimiento de la base sobre el muro norte (a ambos lados de la esclusa y de la puerta del generador) */
@@ -8936,28 +9139,49 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
   /* anillo de eyecciones alrededor del crater grande (centro de PLACES.crater) */
   (function(){var cx=PLACES.crater[0],cz=PLACES.crater[1];
     for(var k=0;k<26;k++){var a=k/26*Math.PI*2+sR(-.1,.1),r=6.3+sR(-.3,.7),x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;if(z>33.6||z<16.6)continue;rock(x,z,sR(.25,.75),sR(.5,.8));}
-    quad(MK(0x2a2622),cx,.02,cz,15,15,-H_,0,fxUV('soot'));
   })();
-  /* huellas del vehiculo desde la esclusa */
-  var trT=cTex(64,128,function(x,w,h){x.clearRect(0,0,w,h);for(var k=0;k<8;k++){x.fillStyle='rgba(0,0,0,.85)';x.fillRect(4,k*16+2,w-8,8);}});
-  var mTrack=new THREE.MeshBasicMaterial({map:trT,color:0x302c28,transparent:true,opacity:.55,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
-  function track(pts){
-    [-.85,.85].forEach(function(off){
-      for(var k=0;k<pts.length-1;k++){var a=pts[k],b=pts[k+1],dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz),nx=-dz/L,nz=dx/L;
-        var ry=Math.atan2(dx,dz);quad(mTrack,(a[0]+b[0])/2+nx*off,.03,(a[1]+b[1])/2+nz*off,.32,L+.1,-H_,ry,[0,0,1,L/1.2]);}
-    });
-  }
-  track([[0,Z0+.5],[0,21],[-2.5,26.5],[-6.5,31],[-8.5,34.5]]);
-  track([[-1.5,Z0+.5],[-7,22],[-14,24.5],[-23,27]]);
+  /* ---- calidad de exterior: manchas de regolito, craters, rodadas, huellas, balizas, sombras ---- */
+  (function(){
+    var i,x,z,okf=function(x,z){return (x<45&&z>16.6&&z<35.4)||(z>14.6&&z<17.4&&x>46&&x<67.4)||(x>64.6&&x<67.4&&z<37.4)||(z>34.6&&z<37.4&&x>46&&x<67.4);};
+    /* manchas anchas claras y oscuras (rompen el repetido de 8 m del suelo) */
+    for(i=0;i<46;i++){x=xR(-25,67);z=xR(15,37.5);if(!okf(x,z))continue;var lg=xr()<.4;exD('blob',lg?0x948f85:0x2a2926,x,z,xR(7,15),xR(5,10),xR(0,6.28),.022);}
+    /* craters: el grande (borde bajo con polvo claro) y varios pequenos */
+    exCrater(PLACES.crater[0],PLACES.crater[1],6,40);
+    for(i=0;i<16;i++){x=xR(-24,44);z=xR(18,34);var cr=.7+Math.pow(xr(),2.2)*4.2;if(Math.hypot(x-PLACES.crater[0],z-PLACES.crater[1])<10||!clearSp(x,z,3.5)||(x>40&&z>22&&z<30))continue;exCrater(x,z,cr,cr>1.6?6:0);}
+    /* rodadas: base -> puerta de tarjeta (ruta principal) y base -> parabolica; el anillo del Puesto */
+    var R1=[[0,17.5],[.8,21.5],[3.4,25.6],[8.5,29.8],[15,33],[23,32.2],[30,29.2],[38,27],[44,26]];
+    var P1=exRuts(R1);exRuts([[-1,18],[-6,22],[-14,25],[-23,27.5]]);
+    var R2=[[44.5,26],[45.2,21],[48,17],[56,16.1],[63,16.4],[66,19.5],[66,27],[65.6,33],[60,36],[50,36.2],[44,34.6]];
+    var P2=exRuts(R2);
+    exSteps(R1.map(function(q){return [q[0]+1.2,q[1]-1.4];}),1.05,0);
+    /* flechas ambar pintadas en la ruta (hacia la puerta del Puesto) y balizas bajas fuera del carril */
+    for(i=4;i<P1.length-3;i+=4){var a=P1[i],b=P1[i+1];exArrow(a[0],a[1],b[0]-a[0],b[1]-a[1]);}
+    for(i=3;i<P1.length-1;i+=3){var a1=P1[i],b1=P1[i+1],dxl=b1[0]-a1[0],dzl=b1[1]-a1[1],ll=Math.hypot(dxl,dzl)||1,sd=(i%6<3)?1:-1;
+      var bxp=a1[0]-dzl/ll*3.4*sd,bzp=a1[1]+dxl/ll*3.4*sd;if(bzp>17&&bzp<35&&clearSp(bxp,bzp,1.2))beacon(bxp,bzp);}
+    for(i=3;i<P2.length-3;i+=5){var a2=P2[i],b2=P2[i+1];exArrow(a2[0],a2[1],b2[0]-a2[0],b2[1]-a2[1]);}
+    [[50,15],[58,15.2],[66.9,22],[66.9,31],[56,37],[48,37]].forEach(function(q){beacon(q[0],q[1]);});
+    /* piedrecillas */
+    for(i=0;i<46;i++){x=xR(-25,66);z=xR(15.5,37.5);if(okf(x,z))pebbles(x,z,1.8,5,.04,.1);}
+    /* sombras largas de las antenas y del asta */
+    PLACES.antenas.forEach(function(a){var L=10.2;exD('shd',0x000000,a[0]+SUND[0]*L/2,a[1]+SUND[1]*L/2,L,.5,SUNRY,.028);});
+    exD('shd',0x000000,-5.4+SUND[0]*2.6,19.4+SUND[1]*2.6,5.2,.35,SUNRY,.028);
+    /* oscurecimiento en la base de los muros */
+    aoStrip(-26,16,46,16,0,1,2.6);aoStrip(-26,36,42,36,0,-1,2.2);aoStrip(-26,16,-26,36,1,0,2.6);aoStrip(46,18,46,34,-1,0,2.2);
+    aoStrip(46,14,68,14,0,1,2.2);aoStrip(68,14,68,38,-1,0,2.2);aoStrip(42,38,68,38,0,-1,2.2);
+    aoStrip(46,18,64,18,0,-1,1.8);aoStrip(64,18,64,34,1,0,1.8);aoStrip(46,34,64,34,0,1,1.8);
+  })();
   decorTick.push(function(dt){blinkS.forEach(function(s,k){s.visible=Math.sin(time*3.2+k*1.7)>.6;});});
-  curRI=null;
+  /* rocas con colision que crea s3d.js (material mRock, icosaedro de 20 caras): mismo gris oscuro y la forma quebrada nueva (misma escala) */
+  mRock.color.setHex(0x4a4742);mRock.map=exRockTex;mRock.emissive=new THREE.Color(0x0c0e12);mRock.needsUpdate=true;
+  ROOMS.forEach(function(R,ri){if(!R.out)return;RG(ri).children.forEach(function(m){if(m.isMesh&&m.material===mRock)m.geometry=RGH[(Math.abs(Math.round(m.position.x*7+m.position.z*3)))%3];});});
+  EXT=false;curRI=null;
 })();
 
 /* =====================================================
    10) ZONA NORTE (sala 10, exterior): x 42..66, z -52..-18. Mina abandonada, brecha de la Enfermeria
 ===================================================== */
 (function(){
-  curRI=10;
+  curRI=10;EXT=true;
   var X0=42,X1=66,Z0=-52,Z1=-18,i,k;
   /* paredes de roca altas e irregulares */
   rockWall(X0,Z0+.1,X1,Z0+.1,0,1,null,6,11);                                        /* norte */
@@ -8967,7 +9191,7 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
   rockWall(X0+.1,-42,X0+.1,-22,1,0,null,6,10,{crown:true});                           /* coronacion sobre la fachada */
   rockWall(X0,Z1-.1,50,Z1-.1,0,-1,null,5,8);rockWall(58,Z1-.1,X1,Z1-.1,0,-1,null,5,8);   /* sur, a los lados del Camino del Rastro */
   /* rocas y grietas en el piso */
-  for(i=0;i<110;i++){var x=sR(X0+1,X1-1),z=sR(Z0+1,Z1-1);if(!clearSp(x,z,2.8)||(x<51.5&&z>-35&&z<-29))continue;rock(x,z,sR(.12,.45),sR(.5,.9));}
+  for(i=0;i<110;i++){var x=sR(X0+1,X1-1),z=sR(Z0+1,Z1-1);if(!clearSp(x,z,2.8)||(x<51.5&&z>-35&&z<-29))continue;RSKIP=xr()<.6;rock(x,z,sR(.12,.45),sR(.5,.9));RSKIP=false;}
   [[49,-45,3],[58,-39.5,2.6],[53,-24,2.4],[61.5,-21,3],[46.5,-36.5,2.2]].forEach(function(c){quad(MK(0x15130f),c[0],.021,c[1],c[2],c[2],-H_,sR(0,6),fxUV('crack'));});
   /* ---- brecha vista desde afuera (pared oeste x=42, z -34..-30, piso a 3.6 m) ---- */
   [[-41.5,-35],[-29,-22.5]].forEach(function(s){
@@ -9073,7 +9297,22 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
   /* pilas de tubos de perforacion y cajas */
   for(k=0;k<5;k++)rod(mSteel,45.4,.12+(k%2)*.2,-45.0-k*.0-(k>=3?.2:0),49,.12+(k%2)*.2,-45.2-k*.12,.1,8);
   boxPrint(45.6,.45,-43.4,.9,.9,.9,.2);boxPrint(46.7,.4,-43.5,.8,.8,.8,-.2);
-  curRI=null;
+  /* ---- calidad de exterior: manchas, craters, rodadas de la mina, balizas hacia la brecha, sombras ---- */
+  (function(){
+    var i,x,z,okn=function(x,z){return x>43&&x<65&&z>-51&&z<-18.6&&!(x<54&&z>-36&&z<-28);};
+    for(i=0;i<34;i++){x=xR(43,65);z=xR(-51,-19);if(!okn(x,z))continue;var lg=xr()<.4;exD('blob',lg?0x948f85:0x2a2926,x,z,xR(6,13),xR(5,9),xR(0,6.28),.022);}
+    [[51,-41,3.4],[60.5,-36.5,1.3],[47.5,-24.5,.9],[58,-23,2.1],[62,-30,.7],[45.5,-39,1.6]].forEach(function(c){exCrater(c[0],c[1],c[2],8);});
+    var N1=[[54,-17.4],[54.6,-23],[55.5,-28.5],[53.6,-31.6],[51.4,-32.2]],N2=[[55.8,-29.6],[58.2,-35],[60.8,-40.6],[62.6,-44.4]],N3=[[58.6,-37.6],[58.4,-43],[60.6,-47.2]];
+    var Q1=exRuts(N1);exRuts(N2);exRuts(N3);
+    exSteps([[52.4,-18],[52.2,-24],[51.4,-28.6],[50.2,-31.6]],1.05,0);
+    for(i=2;i<Q1.length-2;i+=3){var a=Q1[i],b=Q1[i+1];exArrow(a[0],a[1],b[0]-a[0],b[1]-a[1]);}
+    [[51.2,-34.6],[51.2,-29.6],[56.4,-20.5],[52.4,-26],[57.8,-31],[59.6,-42.8],[64.2,-42.2]].forEach(function(q){beacon(q[0],q[1]);});
+    for(i=0;i<40;i++){x=xR(43,65);z=xR(-51,-19);if(okn(x,z))pebbles(x,z,1.8,5,.04,.1);}
+    exD('shd',0x000000,63.6+SUND[0]*5,-49.4+SUND[1]*5,10,1.4,SUNRY,.028);
+    aoStrip(42,-52,66,-52,0,1,2.8);aoStrip(66,-52,66,-47.5,-1,0,2.4);aoStrip(66,-41.5,66,-18,-1,0,2.4);aoStrip(42,-52,42,-18,1,0,2.4);
+    aoStrip(42,-18,50,-18,0,-1,2.2);aoStrip(58,-18,66,-18,0,-1,2.2);
+  })();
+  EXT=false;curRI=null;
 })();
 
 /* =====================================================
@@ -9082,10 +9321,10 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
 ===================================================== */
 function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
 (function(){
-  curRI=11;
+  curRI=11;EXT=true;
   var X0=50,X1=58,Z0=-18,Z1=14,i,k;
   var RW={a0:.9,a1:1.3,p1:.35};rockWall(X0+.1,Z0+.5,X0+.1,Z1,1,0,null,5,8.5,RW);rockWall(X1-.1,Z0+.5,X1-.1,Z1,-1,0,null,5,8.5,RW);
-  for(i=0;i<46;i++){var x=sR(X0+.8,X1-.8),z=sR(Z0+.5,Z1-.5);if(!clearSp(x,z,2.6))continue;rock(x,z,sR(.12,.42),sR(.5,.9));}
+  for(i=0;i<46;i++){var x=sR(X0+.8,X1-.8),z=sR(Z0+.5,Z1-.5);if(!clearSp(x,z,2.6))continue;RSKIP=xr()<.6;rock(x,z,sR(.12,.42),sR(.5,.9));RSKIP=false;}
   /* eje del rastro: serpentea por el pasillo (siempre dentro de x 52.3..55.7) */
   function xc(z){return 54+1.25*Math.sin((z+18)*.2)+.5*Math.sin((z+18)*.47+1);}
   var path=[];
@@ -9098,7 +9337,7 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   }
   var TL=0;for(i=0;i<path.length-1;i++)TL+=Math.hypot(path[i+1][0]-path[i][0],path[i+1][1]-path[i][1]);
   curRI=null;   /* a partir de aqui la sala sale de la posicion de cada pieza (Rastro o Superficie) */
-  var step=2.9,mg=MK(0xc9c2b6),mgB=MK(0xffffff);
+  var step=2.9,mgB=MK(0x8c8679);
   for(var t=0;t<TL;t+=step){
     var a=pathPt(t),b=pathPt(Math.min(TL,t+step)),dx=b.x-a.x,dz=b.z-a.z,L=Math.hypot(dx,dz)||1,cx=(a.x+b.x)/2,cz=(a.z+b.z)/2,ry=decalDir(dx/L,dz/L),nx=-dz/L,nz=dx/L;
     [-1.05,1.05].forEach(function(o,j){quad(mgB,cx+nx*o,.026,cz+nz*o,1.75,L+.35,-H_,ry,fxUV('groove'));});
@@ -9113,7 +9352,7 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   }
   /* marcas de garras a los lados y en las paredes de roca */
   for(i=0;i<9;i++){var qc=pathPt(sR(1,TL-2)),sd=sr()<.5?-1:1;
-    quad(MK(0xe6e0d4),qc.x-qc.fz*sd*sR(2.1,2.9),.036,qc.z+qc.fx*sd*sR(2.1,2.9),1.3,2.5,-H_,decalDir(qc.fx,qc.fz)+sR(-.5,.5),fxUV('claw'));}
+    quad(MK(0x948e82),qc.x-qc.fz*sd*sR(2.1,2.9),.036,qc.z+qc.fx*sd*sR(2.1,2.9),1.3,2.5,-H_,decalDir(qc.fx,qc.fz)+sR(-.5,.5),fxUV('claw'));}
   [[-14.5,2.3,0],[-6.6,1.8,1],[-1,2.6,0],[4,2.0,1],[9.6,2.4,0],[13.2,1.9,1]].forEach(function(g){
     var west=g[2]===0,wx0=west?X0+.03:X1-.03;
     quad(mgB,wx0,g[1],g[0],1.9,.95,0,west?H_:-H_,fxUV('gash'));
@@ -9138,7 +9377,15 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   /* entrada norte: dos mojones con aviso */
   [50.9,57.1].forEach(function(x){bx(mConcr,x,.45,-17.2,.5,.9,.5);bx(mYellow,x,.95,-17.2,.52,.1,.52);});
   quad(mXp,50.85,1.4,-17.2+.26,.9,.225,0,0,xpUV('rastro'));
-  curRI=null;
+  /* ---- calidad de exterior: oscurecimiento en la base de los muros, balizas ambar, polvo, piedrecillas ---- */
+  (function(){
+    var i,x,z;
+    for(i=0;i<16;i++){x=xR(50.8,57.2);z=xR(-17,13.5);var lg=xr()<.4;exD('blob',lg?0x948f85:0x2a2926,x,z,xR(4,8),xR(4,8),xR(0,6.28),.022);}
+    for(i=0;i<34;i++){x=xR(50.8,57.2);z=xR(-17,13.5);pebbles(x,z,1.4,4,.04,.1);}
+    for(i=0;i<11;i++){z=-14+i*2.6;beacon(i%2?51.3:56.7,z);}
+    aoStrip(50,-17.5,50,14,1,0,2.4);aoStrip(58,-17.5,58,14,-1,0,2.4);
+  })();
+  EXT=false;curRI=null;
 })();
 
 /* =====================================================
@@ -13992,6 +14239,7 @@ function wpkTick(dt){
 }
 /* posicion del arma en la mano de los avatares (los modelos en tercera persona los da WX[tipo].tp) */
 AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34];
+var decorTick=decorTick||[];
 /* =====================================================
    BALIZA SENUELO  (equipo 'decoy', tecla B / boton #decoy; sale de la caja misteriosa)
    - se lanza como la granada (mas lenta), al quedarse quieta (o a los 2.5 s) se despliega: sube la antena, luz que pulsa
@@ -14994,7 +15242,11 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       else if(hk)m.color.multiplyScalar(1+hk*3.3);   /* con textura: mismo empuje, como multiplicador */
       if(!m.emissiveMap&&m.emissive&&m.emissive.getHex()===0){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(hk?.1:VMG.fill);if(m.map)m.emissiveMap=m.map;}
     }
-    m.onBeforeCompile=function(sh){sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');};
+    m.onBeforeCompile=function(sh){
+      sh.vertexShader='varying float vVmZ;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tvVmZ=-mvPosition.z;\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');
+      /* lo que queda a menos de 17 cm del ojo (la culata bajo la mejilla al apuntar) no se dibuja: si no, tapa media pantalla */
+      sh.fragmentShader='varying float vVmZ;\n'+sh.fragmentShader.replace('void main() {','void main() {\n\tif(vVmZ<0.17)discard;');
+    };
     m.customProgramCacheKey=function(){return 'vmg';};
     /* Forja Lunar: la misma malla con la textura viva de la Forja encima (setPap cambia a userData.pap) */
     var p=m.clone();p.userData={vmg:true};p.color.multiplyScalar(.55);p.emissive=new THREE.Color(0xffffff);p.emissiveMap=papTex;p.emissiveIntensity=.6;
@@ -15005,6 +15257,7 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   /* KIT DE MATERIALES DE ARMAS (models/kit/kit.json): los GLB de armas no traen texturas; cada material se llama wk_*
      y aqui recibe las texturas repetibles compartidas (un solo juego para todas las armas). */
   var KITP=null,KITT={};
+  var KIT_ADJ={wk_wood:.5,wk_bakelite:.65,wk_steel_bare:.6};   /* calibrado en escena: bajo la luz roja de la base la madera y el acero pulido saltaban demasiado */
   function kitTex(file,srgb){
     if(!file)return null;
     if(!KITT[file]){var t=new THREE.TextureLoader().load('models/kit/'+file);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.flipY=false;
@@ -15017,12 +15270,13 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
     KITP.then(function(K){
       var d=K&&K[m.name];if(!d)return;
       if(d.tint)m.color.setRGB(d.tint[0],d.tint[1],d.tint[2]);
-      if(d.c){m.map=kitTex(d.c,true);m.normalMap=kitTex(d.n,false);m.roughnessMap=m.metalnessMap=kitTex(d.orm,false);m.roughness=1;m.metalness=1;}
+      if(d.c){m.map=kitTex(d.c,true);m.normalMap=kitTex(d.n,false);m.normalScale=new THREE.Vector2(.45,.45);m.roughnessMap=m.metalnessMap=kitTex(d.orm,false);m.roughness=1;m.metalness=1;}
+      var kk=KIT_ADJ[m.name];if(kk)m.color.multiplyScalar(kk);
       else{if(d.rough!=null)m.roughness=d.rough;if(d.metal!=null)m.metalness=d.metal;}
       if(d.emissive){m.emissive.setRGB(d.emissive[0],d.emissive[1],d.emissive[2]);m.emissiveIntensity=Math.min(1.5,d.emissiveIntensity||1);m.userData.kitEmit=true;}
       if(d.opacity!=null&&d.opacity<1){m.transparent=true;m.opacity=d.opacity;m.depthWrite=false;}
       /* relleno propio del arma, igual que vmMat pero ya con su textura */
-      if(!m.userData.kitEmit){m.emissive.setScalar(VMG.fill);m.emissiveMap=m.map||null;if(!m.map)m.emissive.copy(m.color).multiplyScalar(VMG.fill);}
+      if(!m.userData.kitEmit){m.emissive.copy(m.color).multiplyScalar(.14);m.emissiveMap=m.map||null;}
       if(m.userData.pap){var p=m.userData.pap;p.map=m.map;p.normalMap=m.normalMap;p.roughnessMap=m.roughnessMap;p.metalnessMap=m.metalnessMap;p.roughness=m.roughness;p.metalness=m.metalness;p.color.copy(m.color).multiplyScalar(.55);p.needsUpdate=true;}
       m.needsUpdate=true;
     });
@@ -15059,6 +15313,8 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       old.forEach(function(o){o.userData.vmVis=o.visible;o.visible=false;});
       VMG.ok[type]={root:root,nodes:N,old:old};
       if(g.userData.pap)setPap(type,true);
+      /* gancho para el adaptador de la biblioteca de manos (Codex): se llama una vez por arma ya instalada */
+      if(typeof cxHandsAfterInstall==='function'){try{cxHandsAfterInstall(type,g,A,N,vmMat);}catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}}
       return '';
     }catch(e){
       moved.forEach(function(o){if(o.parent)o.parent.remove(o);});if(root.parent)root.parent.remove(root);

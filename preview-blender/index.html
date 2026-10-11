@@ -4715,7 +4715,7 @@ function vquad2(m,sx,sz,ex,ez,ya0,ya1,yb0,yb1,u0,u1,base){
     BTAG=(t===1&&ROOM3D[ri])?ri:null;
     if(t===2)sty=STY[DOOR_DEF[DI[k]].style];
     else{sty=STY[ROOMS[ri].s];out=!!ROOMS[ri].out;}
-    var x0=cx2w(x),x1=x0+TS,z0=cz2w(z),z1=z0+TS,base=FH[k],top=out?base+WH*1.6:CE[k];
+    var x0=cx2w(x),x1=x0+TS,z0=cz2w(z),z1=z0+TS,base=FH[k],top=out?Math.min(base+WH*1.6,Math.max((ROOMS[ri].fh||0)+WH*1.6,base+WH+.6)):CE[k];   /* afuera: el borde del muro no sube con los descansos elevados (brecha de la Zona Norte) */
     if(RD[k]){
       /* escalones: 4 por casilla siguiendo la rampa */
       var d=RD[k],i2;
@@ -4735,7 +4735,10 @@ function vquad2(m,sx,sz,ex,ez,ya0,ya1,yb0,yb1,u0,u1,base){
       if(!inGrid(q[4],q[5])||CT[idx(q[4],q[5])]===0){vquad2(sty.w,sx,sz,ex,ez,hs,top,he,top,u0,u1,base);continue;}
       var n=idx(q[4],q[5]),ns=hCell(n,sx,sz),ne=hCell(n,ex,ez);
       if(ns>hs+.01||ne>he+.01)vquad2(sty.w,sx,sz,ex,ez,hs,Math.max(hs,ns),he,Math.max(he,ne),0,1,base);
-      if(CE[n]<top-.01)vquad2(sty.w,sx,sz,ex,ez,CE[n],top,CE[n],top,0,1,base);
+      /* cara entre techos de distinta altura. Entre dos casillas a cielo abierto no hay techo: antes dejaba paneles
+         flotando sobre el descanso elevado de la brecha (dos aletas de 3.6 m en el aire) */
+      var nOut=RI[n]>=0&&ROOMS[RI[n]]&&!!ROOMS[RI[n]].out;
+      if(CE[n]<top-.01&&!(out&&nOut))vquad2(sty.w,sx,sz,ex,ez,CE[n],top,CE[n],top,0,1,base);
       if(hs>ns+STEP||he>ne+STEP){
         var ix=(ez-sz)/TS*.04,iz=-(ex-sx)/TS*.04;  /* un poco hacia adentro */
         ix=-ix;iz=-iz;
@@ -9254,14 +9257,25 @@ function clearSp(x,z,r){for(var i=0;i<SPW.length;i++)if(Math.hypot(x-SPW[i][0],z
     bx(mSteelD,42.2,5.6,cz,.5,.32,w);bx(mGold,42.06,4.9,cz,.04,.4,w);bx(mTrimD,42.1,.15,cz,.12,.3,w);
     for(var pz=Math.min(s[0],s[1])+.2;pz<=Math.max(s[0],s[1]);pz+=2.2)bx(mSteelD,42.1,2.8,pz,.18,5.6,.25);
   });
-  quad(MK(0x050505),42.05,3.6,-32,11,9,0,H_,fxUV('soot'));
+  /* CASCO DE LA ENFERMERIA visto desde afuera. El muro exterior del mapa llega a 5.76 m y la Enfermeria (2o piso) va de 3.6 a 6.9:
+     por encima del muro se veia el techo de la sala por debajo (una losa oscura suspendida) y el portico de la brecha con sus
+     vigas quedaba flotando en el cielo. Se sube la fachada hasta 8 m con el mismo revestimiento, dejando el hueco de la brecha,
+     con dintel, cornisa y canto de techo; todo pegado al muro (x=42), sin tocar el carril ni la rampa. */
+  [[-42,-35,5.76,8.0],[-29,-20,5.76,8.0],[-35,-34,5.76,8.0],[-30,-29,5.76,8.0],[-34,-30,6.9,8.0]].forEach(function(s){
+    var cz=(s[0]+s[1])/2,w=Math.abs(s[1]-s[0]),h=s[3]-s[2];
+    put(mClad,GPL,42.03,s[2]+h/2,cz,w,h,1,0,H_,0,3.6);
+  });
+  bx(mSteelD,42.2,7.86,-31,.5,.28,22);bx(mSteelD,41.6,8.07,-31,1.3,.14,22.4);          /* cornisa y canto del techo */
+  bx(mSteelD,42.14,6.98,-32,.3,.24,4.6);bx(mTrimD,42.1,5.9,-31,.12,.2,22);              /* dintel de la brecha y junta donde se une al muro bajo */
+  for(var cpz=-41.8;cpz<=-20;cpz+=2.2){if(cpz>-35.2&&cpz<-28.8)continue;bx(mSteelD,42.1,6.9,cpz,.18,2.1,.25);}   /* costillas, siguiendo las del tramo bajo */
+  quad(MK(0x050505),42.05,3.9,-32,11,8,0,H_,fxUV('soot'));
   [-1,1].forEach(function(s){
     var zc=-32+s*2.15;
-    bxr(mSteel,42.55,6.1,zc+s*.2,.1,3.4,1.1,0,0,-.38);bxr(mClad,42.9,4.3,zc+s*.6,.08,2.2,1.3,0,0,-.62);
-    for(k=0;k<5;k++)rod(mRust,42.2,4.0+k*.55,zc+s*(.1+k*.12),42.9+sR(.3,1.1),5.2+k*.6+sR(0,.6),zc+s*(.35+k*.2),.025,4);
+    bxr(mSteel,42.5,5.6,zc+s*.2,.1,2.6,1.1,0,0,-.3);bxr(mClad,42.9,4.3,zc+s*.6,.08,2.2,1.3,0,0,-.62);
+    for(k=0;k<5;k++)rod(mRust,42.2,4.0+k*.55,zc+s*(.1+k*.12),42.9+sR(.3,1.1),4.9+k*.4+sR(0,.6)*.5,zc+s*(.35+k*.2),.025,4);   /* varillas: ya no pasan de 7 m */
     bx(mConcr,42.8,1.8,zc+s*.12,.4,3.6,.35);bx(mConcr,43.6,1.8,zc+s*.12,.4,3.6,.35);bx(mConcD,43.2,3.45,zc+s*.12,1.4,.3,.4);
   });
-  bxr(mSteelD,42.35,8.4,-33.3,.4,.34,2.8,0,0,.18);bxr(mSteelD,42.35,8.1,-30.7,.4,.34,2.2,0,0,-.22);
+  bxr(mSteelD,42.35,7.25,-33.3,.4,.34,2.8,0,0,.18);bxr(mSteelD,42.35,7.05,-30.7,.4,.34,2.2,0,0,-.22);   /* vigas reventadas: ahora cuelgan del dintel, no flotan a 8 m */
   bx(mHaz,43.0,3.65,-32,.9,.02,3.9,0,.6);
   /* escombros sobre la rampa de la brecha (x 44..50) y desparramados al pie */
   for(i=0;i<34;i++){
@@ -14349,7 +14363,7 @@ function wpkTick(dt){
 }
 /* posicion del arma en la mano de los avatares (los modelos en tercera persona los da WX[tipo].tp) */
 AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34];
-/* Ronda Cero — shared rigid hands adapter V3.1, STAGING ONLY, 2026-10-11.
+/* Ronda Cero — shared rigid hands adapter V4, STAGING ONLY, 2026-10-11.
  * No automatic loading, installation, frame loop, or changes to gun gameplay.
  * Load after THREE/GLTFLoader and weapon constructors. See HANDS_ADAPTER_INTEGRATION.md.
  * cxHandsAfterInstall(type,g,A,N,vmMat) matches Claude's loader hook (3ea53c7).
@@ -14466,7 +14480,9 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
     elbow.position.copy(target); // Library landmark is a direct child of the identity root.
   }
   function restore(state){
-    if(state.stopped)return;state.stopped=true;
+    if(state.stopped)return;
+    if(state.cxSleeveTether)state.cxSleeveTether.result.disable();
+    state.stopped=true;
     if(state.wrapper&&state.A.custom===state.wrapper)state.A.custom=state.previousCustom;
     if(state.handsPose&&state.A.vmHandsPose===state.handsPose)state.A.vmHandsPose=state.previousHandsPose;
     state.roots.forEach(function(r){if(r.parent)r.parent.remove(r);});
@@ -14597,8 +14613,8 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
       if(g.userData.cxHandsRequest!==ticket||g.userData.anim!==A)return fail('Superseded hands request');
       if(N&&global.VMG&&global.VMG.ok&&global.VMG.ok[type]&&global.VMG.ok[type].nodes!==N)return fail('Weapon model changed during hands load');
       var result=install(type,g,template);
-      if(result.ok&&type==='revolver'&&typeof global.cxEnableRevolverSleeveTether==='function'){
-        var sleeve=global.cxEnableRevolverSleeveTether(g);
+      if(result.ok&&(type==='revolver'||type==='disruptor')&&typeof global.cxEnableReloadSleeveSweep==='function'){
+        var sleeve=global.cxEnableReloadSleeveSweep(g);
         result.sleeveTether=sleeve;
         if(!sleeve.ok)result.warnings.push('Reload sleeve tether unavailable: '+sleeve.reason);
       }
@@ -14615,7 +14631,7 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
   global.cxUninstallHands=function(g){if(g&&g.userData){g.userData.cxHandsRequest=(g.userData.cxHandsRequest||0)+1;if(g.userData.cxHands)restore(g.userData.cxHands);}};
 })(typeof window!=='undefined'?window:globalThis);
 
-/* V3 revolver sleeve: bounded cross-section swept along a camera-space curve.
+/* V4 reload sleeves: V3 revolver sweep plus a Disruptor geometry-only profile.
  * Replaces V2's vertex displacement toward an elbow 8 cm from the eye. That
  * displacement enlarged the sleeve in perspective and could shear it across
  * the screen. This construction keeps the elbow 45 cm away, below the frustum,
@@ -14631,17 +14647,23 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
   function cameraOf(o){while(o){if(o.isCamera)return o;o=o.parent;}return null;}
   function shown(root,g){for(var p=root;p;p=p.parent){if(!p.visible)return false;if(p===g)return true;}return false;}
   function remove(a,o){var i=a.indexOf(o);if(i>=0)a.splice(i,1);}
+  var profiles={
+    revolver:{pose:'l_cup',count:2,elbow:[-.30,-.53,-.45],privateMaterial:true},
+    disruptor:{pose:'l_fore_v',count:1,elbow:[-.30,-.55,-.50],privateMaterial:false}
+  };
   function enable(g,opts){
     opts=opts||{};
     var state=g&&g.userData&&g.userData.cxHands,A=g&&g.userData&&g.userData.anim;
-    if(!state||state.stopped||state.result.type!=='revolver')return fail('Install revolver hands first');
+    if(!state||state.stopped||!profiles[state.result.type])return fail('Install revolver or Disruptor hands first');
+    var profile=profiles[state.result.type];
     if(state.cxSleeveTether)return state.cxSleeveTether.result;
-    if(A.custom!==state.wrapper)return fail('Unexpected custom animator composition');
+    if(!A||typeof A.custom!=='function'||(state.wrapper&&A.custom!==state.wrapper))return fail('Unexpected custom animator composition');
     var camera=opts.camera||cameraOf(g);if(!camera)return fail('Camera ancestor unavailable');
-    var xyz=opts.elbowCamera||[-.30,-.53,-.45];
+    var xyz=opts.elbowCamera||profile.elbow;
     if(xyz.length!==3||!xyz.every(function(v){return typeof v==='number'&&isFinite(v);})||xyz[2]>-.30)return fail('Elbow must be at least 30 cm from eye');
     var target=new THREE.Vector3().fromArray(xyz),records=[],ownedMaterials=[];
     var previous=A.custom,previousStateWrapper=state.wrapper,previousUninstall=state.result.uninstall;
+    var hadPreviousCustom=Object.prototype.hasOwnProperty.call(state,'previousCustom'),previousStateCustom=state.previousCustom;
     var tether={stopped:false,result:null};
     function undoRecords(){
       records.forEach(function(r){
@@ -14655,7 +14677,10 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
       if(tether.stopped)return;tether.stopped=true;
       if(!state.stopped){
         if(A.custom===wrapper)A.custom=previous;
-        if(state.wrapper===wrapper)state.wrapper=previousStateWrapper;
+        if(state.wrapper===wrapper){
+          state.wrapper=previousStateWrapper;
+          if(hadPreviousCustom)state.previousCustom=previousStateCustom;else delete state.previousCustom;
+        }
         if(state.result.uninstall===uninstallAll)state.result.uninstall=previousUninstall;
       }
       undoRecords();if(state.cxSleeveTether===tether)delete state.cxSleeveTether;
@@ -14676,8 +14701,8 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
     }
     try{
       state.roots.forEach(function(root){
-        if(root.name!=='l_cup')return;
-        var mesh=find(root,'l_cup.sleeve'),cuff=find(root,'l_cup.cuff_attach'),elbow=find(root,'l_cup.elbow');
+        if(root.name!==profile.pose)return;
+        var mesh=find(root,profile.pose+'.sleeve'),cuff=find(root,profile.pose+'.cuff_attach'),elbow=find(root,profile.pose+'.elbow');
         if(!mesh||!mesh.isMesh||!cuff||!elbow)throw new Error('Missing left sleeve landmarks');
         root.updateWorldMatrix(true,true);
         var c=mesh.worldToLocal(cuff.getWorldPosition(new THREE.Vector3()));
@@ -14696,9 +14721,12 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
         var r={root:root,mesh:mesh,oldGeometry:mesh.geometry,geometry:geo,oldMaterial:mesh.material,oldM0:mesh.userData.m0,
           base:base,radials:radials,stations:stations,cuff:c,axis:axis,length:length,radius:cuffRadius,dirty:false};
         records.push(r);state.geometries.push(geo);mesh.geometry=geo;
-        mesh.material=Array.isArray(r.oldMaterial)?r.oldMaterial.map(material):material(r.oldMaterial);mesh.userData.m0=mesh.material;
+        /* Disruptor retains the exact shared material and integrator callback.
+         * The existing revolver near-cutoff treatment is unchanged.
+         */
+        if(profile.privateMaterial){mesh.material=Array.isArray(r.oldMaterial)?r.oldMaterial.map(material):material(r.oldMaterial);mesh.userData.m0=mesh.material;}
       });
-      if(records.length!==2)throw new Error('Expected two left sleeve instances');
+      if(records.length!==profile.count)throw new Error('Unexpected left sleeve instance count for '+state.result.type);
     }catch(e){undoRecords();return fail(String(e&&e.message||e));}
 
     var cameraInv=new THREE.Matrix4(),toCamera=new THREE.Matrix4(),toMesh=new THREE.Matrix4(),normalToCamera=new THREE.Matrix3();
@@ -14755,8 +14783,12 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
       });
     }
     function wrapper(){var out=previous.apply(this,arguments);if(!tether.stopped&&!state.stopped)update(arguments[1]);return out;}
+    /* Revolver already owns a hand-visibility wrapper and its original callback.
+     * Disruptor has a direct animator: save it for the base adapter's rollback.
+     */
+    if(!previousStateWrapper)state.previousCustom=previous;
     A.custom=wrapper;state.wrapper=wrapper;state.result.uninstall=uninstallAll;
-    tether.result={ok:true,version:3,disable:disable,elbowCamera:xyz.slice(),limits:'Sleeve sweep only; reload grip fingers unchanged'};
+    tether.result={ok:true,version:4,type:state.result.type,disable:disable,elbowCamera:xyz.slice(),limits:'Sleeve sweep only; reload grip fingers unchanged'};
     state.cxSleeveTether=tether;
     if(!global.cxUninstallHands.cxSleeveAware){
       var uninstall=global.cxUninstallHands;
@@ -14765,7 +14797,8 @@ AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34]
     }
     return tether.result;
   }
-  global.cxEnableRevolverSleeveTether=enable;
+  global.cxEnableReloadSleeveSweep=enable;
+  global.cxEnableRevolverSleeveTether=enable; // Existing explicit integrations remain compatible.
 })(typeof window!=='undefined'?window:globalThis);
 
 /* =====================================================

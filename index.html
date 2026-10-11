@@ -4395,7 +4395,7 @@ function lampMat(c){return lampMats[c]||(lampMats[c]=new THREE.MeshBasicMaterial
 /* geometria estatica fusionada: un mesh por material y por trozo de 8x8 casillas */
 /* salas con modelo 3D (s_room3d.js): lo visual de esas salas va en lotes aparte con userData.r3d=sala,
    para esconderlo cuando el modelo cargue (BTAG = sala que se esta construyendo, o null) */
-var ROOM3D={0:1},BTAG=null;
+var ROOM3D={0:1,1:1},BTAG=null;
 var CH=12,builders={};
 function B(m,x,z){
   var k=m.uuid+'|'+Math.floor((x/TS+OX)/CH)+'|'+Math.floor((z/TS+OZ)/CH)+(BTAG!==null?'|r'+BTAG:'');
@@ -4971,7 +4971,7 @@ function doorTex(d){
 doors.forEach(function(d){
   var t=doorTex(d);
   var m=new THREE.Mesh(new THREE.BoxGeometry(d.axisX?.5:TS*d.w-.04,WH,d.axisX?TS*d.w-.04:.5),
-    new THREE.MeshPhongMaterial({map:t,emissive:0xffffff,emissiveMap:t,emissiveIntensity:.3,specular:0x222222,shininess:20}));
+    new THREE.MeshPhongMaterial({map:t,emissive:0xffffff,emissiveMap:t,emissiveIntensity:.12,specular:0x0a0a0a,shininess:20}));   /* .3 quemaba la puerta a blanco con la linterna */
   m.position.set(d.x,d.fy+WH/2,d.z);scene.add(m);d.mesh=m;d.slide=0;
 });
 function openDoor(d){
@@ -6175,7 +6175,7 @@ var PROP_DEF=[
   ['crate',20.9,23.6,1.4,1.2,1.4],['crate',20.9,30.3,1.4,1.2,1.4],['crate',22.3,30.4,1.4,1.2,1.2],['barrel',33.4,23.6],['barrel',33.5,24.3],
   
   /* Laboratorio: dos mesas al centro y columnas que no tapan ventanas */
-  ['counter',9.0,21.6,5,1,1],['counter',9.0,25.1,5,1,1],['conc',5.75,21.25,.8,3.6,.8],['conc',14.0,20.25,.8,3.6,.8],['conc',14.0,26.5,.8,3.6,.8],['crate',15.5,19.6,1.4,1.2,1.2],
+  ['counter',9.0,21.6,5,1,1],['counter',9.0,25.1,5,1,1],['conc',5.75,21.25,.8,3.6,.8],['conc',14.0,20.25,.8,3.6,.8],['conc',14.0,26.5,.8,3.6,.8],
   /* Dormitorios (2o piso): literas pegadas a la pared oeste y casilleros al este */
   ['bunk',23.6,12.0,1,1.1,2],['bunk',23.6,17.2,1,1.1,2],['locker',33.7,11.6,.5,2.2,.9],['locker',33.7,12.6,.5,2.2,.9],['locker',33.7,17.6,.5,2.2,.9],
   ['conc',26.5,13.5,.8,3.6,.8],['conc',31.5,13.5,.8,3.6,.8],['conc',26.5,16.5,.8,3.6,.8],['conc',31.5,16.5,.8,3.6,.8],
@@ -10709,10 +10709,10 @@ var surg=null;
   wtext(28,30,'s',2.0,2.8,.7,'t10');
   wdec(wallF(33,28,'e'),0,1.2,1.0,1.4,'smearV2');
   KEEP=true;corpseLie(-5.5,3.9,-.6,cOrange);KEEP=false;
-  /* laboratorio */
-  curRI=1;
+  /* laboratorio (el rastro del piso y el cadaver de bata se quedan aunque el Lab tenga modelo 3D; lo demas lo trae el modelo) */
+  curRI=1;KEEP=true;
   dragTrail([[-19.4,-4.1],[-22,-5],[-26,-7.2],[-30,-9],[-32.6,-11.5],[-34.4,-14.2],[-35.8,-16.4]],.6,1);curRI=1;
-  corpseLie(-28.2,-5.2,PI+.3,cCoat);
+  corpseLie(-28.2,-5.2,PI+.3,cCoat);KEEP=false;
   fdec(-29.4,-4.3,2.4,1.4,.1,'water',{col:0x7aff9a});fdec(-27.6,-4.0,1.2,1.2,.4,'splat2');
   wtext(12,19,'n',1.65,2.6,.65,'t8');wdec(wallF(14,19,'n'),-.3,1.25,1.0,1.0,'hands');
   (function(){var x=-32.5,z=-6.8,ce=ceilAt(x,z);bx(C(mGP,0x050506),x,ce-.006,z,1.0,.01,.8,0,puv('dark'));for(var i=0;i<4;i++){var ox=hR(-.35,.35),oz=hR(-.3,.3);rod(cCable,x+ox,ce,z+oz,x+ox*1.4,ce-hR(.5,1.0),z+oz*1.3,.012,4);}
@@ -13384,8 +13384,11 @@ function shellRebucket(){
   return before+'>'+keys.length;
 }
 /* =====================================================
-   SALAS CON MODELO 3D (Blender + luz horneada): por ahora el Hangar (sala 0)
-   rooms/hangar.glb (uv2 = lightmap) + hangar_lm0.jpg (sin energia) + hangar_lm1.jpg (con energia) + hangar.json
+   SALAS CON MODELO 3D (Blender + luz horneada): Hangar (sala 0) y Laboratorio (sala 1)
+   rooms/<sala>.glb (uv2 = lightmap) + <sala>_lm0.jpg (sin energia) + <sala>_lm1.jpg (con energia) + <sala>.json
+   Texturas COMPARTIDAS: los glb no traen imagenes adentro, apuntan a rooms/tex/*.jpg|webp (uri relativa).
+   Las salas se cargan una tras otra con THREE.Cache encendido: una imagen que ya bajo otra sala no se vuelve
+   a bajar, y la textura (GPU) se reutiliza por imagen (R3D.tex).
    Si algo falla (sin red, sin archivos, en node) no pasa nada: queda la sala procedural.
    Al cargar se quita lo visual procedural de la sala (mallas con userData.r3d = sala), NO lo de juego
    (puertas, tablas, perks, armas de pared, caja, interacciones).
@@ -13395,7 +13398,7 @@ var R3D={rooms:{},mats:[],mix:0,mixShow:0,t:0,
   uLampK:{value:.3},     /* cuanto de las 3 luces de lampara dinamicas (ya estan en el lightmap) */
   uLmMix:{value:0}       /* 0 = lightmap sin energia, 1 = con energia (el de energia va por sala en uLm2) */
 };
-var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'}];
+var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'},{ri:1,base:'rooms/lab',label:'Laboratorio'}];
 (function(){
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
   var LF=THREE.ShaderChunk.lights_fragment_begin
@@ -13416,22 +13419,35 @@ var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'}];
   function getGLB(url){return new Promise(function(ok,ko){new THREE.GLTFLoader().load(url,ok,null,ko);});}
   var aniso=Math.min(8,renderer.capabilities.getMaxAnisotropy?renderer.capabilities.getMaxAnisotropy():1);
   function texFix(t,lin){if(!t)return;if(lin!==false)t.encoding=THREE.LinearEncoding;t.anisotropy=aniso;t.needsUpdate=true;}
+  /* una sola textura por imagen entre todas las salas (la de la sala nueva se descarta antes de subir a la GPU) */
+  var TEXC=typeof Map!=='undefined'?new Map():null;R3D.tex=TEXC;
+  function shareTex(m){
+    if(!TEXC)return;
+    ['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap'].forEach(function(k){
+      var t=m[k];if(!t||!t.image)return;
+      var c=TEXC.get(t.image);
+      if(c&&c!==t){m[k]=c;t.dispose();}
+      else if(!c)TEXC.set(t.image,t);
+    });
+  }
 
   function install(def,meta,lm0,lm1,gltf){
     var ri=def.ri,G=gltf.scene;
     /* sin mipmaps: las islas del atlas estan pegadas y el lightmap es suave (asi no se mezclan de lejos) */
     [lm0,lm1].forEach(function(t){t.flipY=false;t.encoding=THREE.LinearEncoding;t.generateMipmaps=false;t.minFilter=THREE.LinearFilter;t.needsUpdate=true;});
     var uLm2={value:lm1};
-    var lamp=[],emerg=[],flick=[];
+    var lamp=[],emerg=[],flick=[],glowm=[];
     G.traverse(function(o){
       if(!o.isMesh)return;
       o.raycast=function(){};o.matrixAutoUpdate=false;o.updateMatrix();
       var m=o.material,nm=(m.name||'').replace(/\.\d+$/,'');
+      shareTex(m);
       texFix(m.map);texFix(m.normalMap,false);texFix(m.roughnessMap,false);texFix(m.metalnessMap,false);texFix(m.emissiveMap);
       m.lightMap=lm0;m.lightMapIntensity=meta.lmK||2;m.envMap=null;
-      if(nm==='decal'){m.transparent=true;m.depthWrite=false;m.alphaTest=.02;m.polygonOffset=true;m.polygonOffsetFactor=-2;m.polygonOffsetUnits=-2;o.renderOrder=2;}
-      if(nm==='lamp')lamp.push(m);else if(nm==='emerg')emerg.push(m);else if(nm==='flick')flick.push(m);
-      if(nm==='lamp'||nm==='emerg'||nm==='flick'){m.userData.em=m.emissive.clone();m.emissive.setRGB(0,0,0);}
+      if(nm==='decal'||nm==='decal2'){m.transparent=true;m.depthWrite=false;m.alphaTest=.02;m.polygonOffset=true;m.polygonOffsetFactor=-2;m.polygonOffsetUnits=-2;o.renderOrder=2;}
+      if(nm==='glass'){m.transparent=true;m.depthWrite=false;m.opacity=Math.min(m.opacity,.28);m.side=THREE.DoubleSide;m.roughness=.08;o.renderOrder=3;}
+      if(nm==='lamp'||nm==='scrp')lamp.push(m);else if(nm==='emerg')emerg.push(m);else if(nm==='flick')flick.push(m);else if(nm==='glow')glowm.push(m);
+      if(nm==='lamp'||nm==='emerg'||nm==='flick'||nm==='scrp'||nm==='glow'){m.userData.em=m.emissive.clone();m.emissive.setRGB(0,0,0);}
       patchMat(m,uLm2);m.needsUpdate=true;R3D.mats.push(m);
     });
     G.updateMatrixWorld(true);
@@ -13467,7 +13483,7 @@ var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'}];
         var cn=new THREE.Mesh(cg,cm);cn.raycast=function(){};cn.renderOrder=3;RG(ri).add(cn);glows.push({m:cm,st:'cone'});
       }
     });
-    R3D.rooms[ri]={G:G,lamp:lamp,emerg:emerg,flick:flick,glows:glows,meta:meta,lm:[lm0,lm1]};
+    R3D.rooms[ri]={G:G,lamp:lamp,emerg:emerg,flick:flick,glowm:glowm,glows:glows,meta:meta,lm:[lm0,lm1]};
     R3D.mix=R3D.mixShow=(typeof power!=='undefined'&&power)?1:0;
     r3dLook();
   }
@@ -13480,7 +13496,9 @@ var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'}];
       R.lamp.forEach(function(m){m.emissive.copy(m.userData.em).multiplyScalar(mx);});
       R.emerg.forEach(function(m){m.emissive.copy(m.userData.em).multiplyScalar((1-mx)*pulse+.06);});
       R.flick.forEach(function(m){m.emissive.copy(m.userData.em).multiplyScalar((mx>.5?1:.35)*fk);});
-      R.glows.forEach(function(g){g.m.opacity=g.st==='on'?.85*mx:g.st==='off'?(1-mx)*pulse*.9:g.st==='flick'?fk*(mx>.5?.9:.3):.05*mx;});
+      /* equipos con bateria (tanques, nevera, aislamiento): siempre prendidos, con un temblor leve */
+      R.glowm.forEach(function(m){m.emissive.copy(m.userData.em).multiplyScalar(.82+.1*Math.sin(t*2.3)+.06*fk);});
+      R.glows.forEach(function(g){g.m.opacity=g.st==='on'?.85*mx:g.st==='off'?(1-mx)*pulse*.9:g.st==='flick'?fk*(mx>.5?.9:.3):g.st==='glow'?.45+.1*Math.sin(t*2.3):.05*mx;});
     }
   }
   R3D.look=r3dLook;
@@ -13500,11 +13518,28 @@ var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar'}];
   var _apl=applyPowerLook;
   applyPowerLook=function(on){_apl(on);if(!on){R3D.mix=R3D.mixShow=0;}r3dLook();};
 
+  /* una sala tras otra: asi las texturas compartidas se bajan una sola vez (THREE.Cache) */
+  if(THREE.Cache)THREE.Cache.enabled=true;
+  /* la misma imagen pedida dos veces a la vez (p.ej. atlas como color y como emisivo) se baja una sola vez */
+  [THREE.ImageBitmapLoader,THREE.ImageLoader].forEach(function(C){
+    if(!C||!C.prototype||C.prototype._r3d)return;
+    var ld=C.prototype.load,fly={};C.prototype._r3d=1;
+    C.prototype.load=function(url,onLoad,onProgress,onError){
+      var key=(this.path||'')+url;
+      if(THREE.Cache.get(this.manager?this.manager.resolveURL(key):key)!==undefined)return ld.call(this,url,onLoad,onProgress,onError);
+      if(fly[key]){fly[key].push([onLoad,onError]);return;}
+      fly[key]=[[onLoad,onError]];
+      return ld.call(this,url,function(r){var L=fly[key];delete fly[key];L.forEach(function(c){if(c[0])c[0](r);});},onProgress,
+        function(e){var L=fly[key];delete fly[key];L.forEach(function(c){if(c[1])c[1](e);});});
+    };
+  });
+  var chain=Promise.resolve();
   ROOM3D_DEF.forEach(function(def){
     if(!ROOM3D[def.ri])return;
-    var p=getJSON(def.base+'.json').then(function(meta){
+    var p=chain.then(function(){return getJSON(def.base+'.json');}).then(function(meta){
       return Promise.all([getTex(def.base.replace(/[^\/]*$/,'')+meta.lm[0]),getTex(def.base.replace(/[^\/]*$/,'')+meta.lm[1]),getGLB(def.base+'.glb')]).then(function(r){install(def,meta,r[0],r[1],r[2]);});
     }).catch(function(e){try{console.warn('sala 3D sin cargar ('+def.label+'):',e&&e.message||e);}catch(_){}});
+    chain=p;
     if(window.ASSETS&&typeof ASSETS.track==='function'){try{ASSETS.track(p,def.label);}catch(_){}}
   });
 })();

@@ -10863,11 +10863,21 @@ touch.addEventListener('mouseleave',function(){mfX=-1;});
   if(mfX<m)look(-9*(1-mfX/m),0);else if(mfX>w-m)look(9*(1-(w-mfX)/m),0);
 })();
 function mouseOk(){return mode==='play'&&!pauseOn&&(document.pointerLockElement===touch||mouseFree);}
-document.addEventListener('mousedown',function(e){
-  if(e.target!==touch||!mouseOk())return;   /* 1er clic sin mouse atrapado: solo lo atrapa */
-  if(e.button===2)adsOn=true;else if(e.button===0)firing=true;
-});
-document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch||mouseFree){if(e.button===2)adsOn=false;else if(e.button===0)firing=false;}});
+/* Botones del mouse por mascara (e.buttons): asi da igual en que orden se aprieten o sueltan
+   (apuntar con derecho y disparar con izquierdo, o al reves). fireTap = clic rapido que no
+   alcanzo a durar un cuadro: igual dispara una vez. */
+var fireTap=false;
+function mouseBtns(e,down){
+  if(!mouseOk())return;
+  if(down&&document.pointerLockElement!==touch&&e.target!==touch)return;   /* sin mouse atrapado: solo clics sobre el juego */
+  var b=e.buttons;
+  if(typeof b!=='number'){if(down){if(e.button===2)adsOn=true;else if(e.button===0)firing=true;}return;}
+  var f=!!(b&1),a=!!(b&2);
+  if(f&&!firing)fireTap=true;
+  firing=f;adsOn=a;
+}
+document.addEventListener('mousedown',function(e){mouseBtns(e,true);});
+document.addEventListener('mouseup',function(e){if(document.pointerLockElement===touch||mouseFree)mouseBtns(e,false);});
 document.addEventListener('keydown',function(e){if(e.code==='Escape'&&mouseFree&&mode==='play'&&!pauseOn&&document.pointerLockElement!==touch&&typeof setPause==='function')setPause(true);});
 
 var fireBtn=$('fire'),fid=null,fx=0,fy=0;
@@ -11161,6 +11171,9 @@ function netEv(k,peer,a,b){NET.evSeq++;NET.ev.push([NET.evSeq,k,peer||'',a==null
 function netPlayers(){if(!NET.on)return 1;var n=1;for(var k in NET.av)if(NET.av[k].st!=='gone')n++;return n;}
 
 /* ---------- menu: entrar a sala, lista y empezar ---------- */
+/* version del juego: va en la presencia para avisar en la sala si alguien tiene una vieja en cache */
+var RC_VER=13;
+(function(){try{var k=document.querySelector('#menu .kick');if(k)k.textContent=k.textContent+' · v'+RC_VER;}catch(_){}})();
 $('cjoin').addEventListener('click',function(){
   audioInit();
   if(NET.room){netLeave();return;}
@@ -11170,7 +11183,7 @@ $('cjoin').addEventListener('click',function(){
   $('cmsg').textContent='Entrando a la sala '+NET.code+'…';
   NET.lobby.join(NET.code).then(function(r){
     NET.room=r;NET.sid='';
-    r.presence({n:NET.name,st:'lobby',sid:'',g:null,rq:null}).catch(function(){});
+    r.presence({n:NET.name,v:RC_VER,st:'lobby',sid:'',g:null,rq:null}).catch(function(){});
     $('cjoin').textContent='Salir de la sala';
     $('cmsg').textContent='Estás en la sala '+NET.code+'. Pásale este código a tu pana.';
   },function(e){$('cmsg').textContent='No se pudo entrar a la sala ('+((e&&e.code)||'error')+'). Prueba otra vez.';});
@@ -11209,14 +11222,16 @@ function netMenuTick(dt){
   if(NET.on&&mode==='menu')netQuit();
   if(!NET.room)return;
   NET.menuT-=dt;if(NET.menuT>0)return;NET.menuT=.25;
-  var ps=netPeers(),html='',run=null,low=null;
+  var ps=netPeers(),html='',run=null,low=null,newer=false;
   ps.forEach(function(p){
     var pr=p.presence||{};if(!pr.n)return;
     var me=p.isMe&&p.sameTab;
-    html+='<li><i style="background:'+netColor(p.peer)+'"></i>'+escHtml(String(pr.n))+(me?' <em>(tú)</em>':'')+(pr.g&&pr.g.on?' <em>· jugando</em>':'')+'</li>';
+    var vOld=!me&&(pr.v||0)<RC_VER;if(!me&&(pr.v||0)>RC_VER)newer=true;
+    html+='<li><i style="background:'+netColor(p.peer)+'"></i>'+escHtml(String(pr.n))+(me?' <em>(tú)</em>':'')+(pr.g&&pr.g.on?' <em>· jugando</em>':'')+(vOld?' <em style="color:#ec2a33">· versión vieja: que recargue (Ctrl+Shift+R)</em>':'')+'</li>';
     if(!me&&pr.g&&pr.g.on&&pr.g.sid&&(!run||p.peer<run.peer))run=p;
     if(!low||p.peer<low.peer)low=p;
   });
+  if(newer)html+='<li><em style="color:#ec2a33">Hay una versión nueva del juego: recarga la página (Ctrl+Shift+R)</em></li>';
   $('clist').innerHTML=html;
   if(mode!=='menu'){$('cstart').hidden=true;return;}
   if(run){netJoinSession(run);return;}
@@ -13800,7 +13815,7 @@ function update(dt){
   updateAim(dt);
   if(cd>0)cd-=dt;
   if(reloading>0){reloading-=dt;if(reloading<=0){reloading=0;finishReload();}}
-  if(firing)shoot();
+  if(firing||fireTap){fireTap=false;shoot();}
   recoil=Math.max(0,recoil-dt*9);kick*=Math.max(0,1-dt*10);kickY*=Math.max(0,1-dt*9);
   swAnim=Math.max(0,swAnim-dt*4);
   adsA=lerp(adsA,(adsOn&&reloading<=0&&slideT<=0)?1:0,Math.min(1,dt*12));

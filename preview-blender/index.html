@@ -14239,7 +14239,375 @@ function wpkTick(dt){
 }
 /* posicion del arma en la mano de los avatares (los modelos en tercera persona los da WX[tipo].tp) */
 AVW.revolver=[.06,-.1,-.5];AVW.xbow=[.07,-.14,-.3];AVW.disruptor=[.07,-.14,-.34];
-var decorTick=decorTick||[];
+/* Ronda Cero — shared rigid hands adapter, STAGING ONLY, 2026-10-11.
+ * No automatic loading, installation, frame loop, or changes to gun gameplay.
+ * Load after THREE/GLTFLoader and weapon constructors. See HANDS_ADAPTER_INTEGRATION.md.
+ * cxHandsAfterInstall(type,g,A,N,vmMat) matches Claude's loader hook (3ea53c7).
+ * cxLoadHands(url) -> Promise<gltf>; cxInstallHands(type,g,gltf) -> result.
+ * Optional configuration lives in g.userData.cxHandsOptions; explicit carrier refs in
+ * g.userData.cxHandsRefs={HR,HL,HLX,SL}. Revolver requires all four references.
+ * This library has fixed fingers. Reload grip articulation is NOT supplied here.
+ */
+(function(global){
+  'use strict';
+  var pending=null,pendingURL=null,materials=new WeakMap();
+  var CFG={
+    rifle:   {r:'r_rifle',l:'l_fore_h',R:[0,-.058,.052,-.32],L:[0,-.03,-.31,0],dy:.026},
+    smg:     {r:'r_rifle',l:'l_fore_v',R:[0,-.055,.03,-.10],L:[0,-.072,-.15,-.12],dy:0},
+    shotgun: {r:'r_rifle',l:'l_pump',R:[0,-.045,.12,-.40],L:[0,-.038,-.27,0],dy:.022},
+    lmg:     {r:'r_rifle',l:'l_fore_h',R:[0,-.058,.052,-.32],L:[0,-.03,-.31,0],dy:.024},
+    sniper:  {r:'r_rifle',l:'l_fore_h',R:[0,-.058,.052,-.32],L:[0,-.03,-.30,0],dy:.021},
+    nail:    {r:'r_rifle',l:'l_fore_h',R:[0,-.052,.045,-.30],L:[0,-.035,-.24,0],dy:-.002},
+    zapper:  {r:'r_pistol',l:'l_cup',R:[0,-.05,.035,-.25],L:[0,-.05,.035,-.25],dy:0},
+    eclipse: {r:'r_pistol',l:'l_cup',R:[0,-.05,.035,-.25],L:[0,-.05,.035,-.25],dy:0},
+    revolver:{r:'r_pistol',l:'l_cup',R:[0,-.054,.04,-.30],L:[0,-.054,.04,-.30],dy:0},
+    xbow:    {r:'r_rifle',l:'l_fore_v',R:[0,-.055,.045,-.10],L:[0,-.072,-.17,-.12],dy:0},
+    disruptor:{r:'r_rifle',l:'l_fore_v',R:[0,-.05,.04,-.25],L:[0,-.075,-.13,-.10],dy:0}
+  };
+  function fail(reason){return {ok:false,reason:reason};}
+  function contains(parent,node){while(node){if(node===parent)return true;node=node.parent;}return false;}
+  function finite3(a){return a&&a.length>=3&&isFinite(a[0])&&isFinite(a[1])&&isFinite(a[2]);}
+  function ownHand(o){return !!(o.userData&&o.userData.cxHand);}
+  function named(root,name){return root&&root.getObjectByName(name);}
+
+  /* Materials are shared across all installed poses. Original template materials/maps
+   * remain intact. Default shader matches existing viewmodel depth compression.
+   * opts.prepareMaterial can be the integrator's vmMat (called ONCE per source material).
+   * Hands deliberately do not receive the weapon's animated PaP material.
+   */
+  function materialFor(src,opts){
+    var cached=materials.get(src);if(cached)return cached;
+    var m=src.clone();m.userData={};
+    if(opts.prepareMaterial){m=opts.prepareMaterial(m)||m;}
+    else{
+      m.fog=false;m.depthTest=true;m.depthWrite=true;
+      if(m.emissive){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(.10);if(m.map)m.emissiveMap=m.map;}
+      m.onBeforeCompile=function(sh){sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>',
+        '#include <project_vertex>\n gl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');};
+      m.customProgramCacheKey=function(){return 'cx-hands-v1';};
+    }
+    /* vmMat may create a private PaP clone. It is never used for gloves. */
+    if(m.userData.pap){if(m.userData.pap!==m&&m.userData.pap.dispose)m.userData.pap.dispose();delete m.userData.pap;}
+    m.userData.cxHandMaterial=true;m.needsUpdate=true;materials.set(src,m);return m;
+  }
+  function copyPose(template,name,opts){
+    var src=named(template,name);if(!src)throw new Error('Missing library root '+name);
+    var count=0;src.traverse(function(o){if(o.isSkinnedMesh)throw new Error('Expected rigid library pose: '+name);if(o.isMesh)count++;});
+    if(!count)throw new Error('Empty library pose '+name);
+    var root=src.clone(true);root.visible=true;
+    root.traverse(function(o){
+      o.userData={cxHand:true};
+      if(!o.isMesh)return;
+      o.userData.vmHand=true;o.visible=true;o.frustumCulled=false;o.renderOrder=90;
+      o.raycast=function(){};
+      o.material=Array.isArray(o.material)?o.material.map(function(m){return materialFor(m,opts);}):materialFor(o.material,opts);
+    });
+    return root;
+  }
+  function anchor(parent,p,existing,state){
+    if(existing)return existing;
+    var a=new THREE.Group();a.name='cx_hand_anchor';a.position.set(p[0],p[1],p[2]);a.rotation.x=p[3];
+    parent.add(a);state.anchors.push(a);return a;
+  }
+  /* Convert carrier-space elbow to pose local space. Warp sleeve only, using smooth
+   * endpoint displacement and a protected 45 mm cuff region. Fingers/cuff are untouched.
+   * Object3D.clone shares geometry: clone each sleeve buffer BEFORE modifying vertices.
+   */
+  function fitSleeve(root,poseName,carrier,arm,state,opts){
+    if(opts.fitSleeves===false)return;
+    var cuff=named(root,poseName+'.cuff_attach'),elbow=named(root,poseName+'.elbow');
+    var sleeve=named(root,poseName+'.sleeve');
+    if(!finite3(arm)||!cuff||!elbow||!sleeve||!sleeve.isMesh||!sleeve.geometry.attributes.position){
+      state.warnings.push('Sleeve kept nominal: '+poseName+' lacks endpoint/mesh data');return;
+    }
+    root.updateWorldMatrix(true,true);
+    var c=root.worldToLocal(cuff.getWorldPosition(new THREE.Vector3()));
+    var e=root.worldToLocal(elbow.getWorldPosition(new THREE.Vector3()));
+    var target=root.worldToLocal(carrier.localToWorld(new THREE.Vector3(arm[0],arm[1],arm[2])));
+    var axis=e.clone().sub(c),len=axis.length(),dst=target.distanceTo(c),delta=target.clone().sub(e);
+    if(!isFinite(len)||len<.08||!isFinite(dst)||dst<len*.5||dst>len*1.75||delta.length()>.25){
+      state.warnings.push('Sleeve kept nominal: '+poseName+' endpoint exceeds conservative warp limits');return;
+    }
+    if(delta.lengthSq()<1e-10)return;
+    axis.divideScalar(len);
+    var toRoot=new THREE.Matrix4().copy(root.matrixWorld).invert().multiply(sleeve.matrixWorld);
+    var toMesh=toRoot.clone().invert(),geo=sleeve.geometry.clone(),p=geo.attributes.position;
+    state.geometries.push(geo);sleeve.geometry=geo;
+    var v=new THREE.Vector3(),rel=new THREE.Vector3();
+    for(var i=0;i<p.count;i++){
+      v.fromBufferAttribute(p,i).applyMatrix4(toRoot);rel.copy(v).sub(c);
+      var u=Math.max(0,Math.min(1,(rel.dot(axis)-.045)/(len-.045)));
+      u=u*u*(3-2*u);v.addScaledVector(delta,u).applyMatrix4(toMesh);p.setXYZ(i,v.x,v.y,v.z);
+    }
+    p.needsUpdate=true;geo.computeVertexNormals();geo.computeBoundingBox();geo.computeBoundingSphere();
+    /* Tangents generated for the source sleeve no longer describe its new shape. */
+    if(geo.getAttribute('tangent'))geo.deleteAttribute('tangent');
+    elbow.position.copy(target); // Library landmark is a direct child of the identity root.
+  }
+  function restore(state){
+    if(state.stopped)return;state.stopped=true;
+    if(state.wrapper&&state.A.custom===state.wrapper)state.A.custom=state.previousCustom;
+    state.roots.forEach(function(r){if(r.parent)r.parent.remove(r);});
+    state.anchors.forEach(function(a){if(a.parent)a.parent.remove(a);});
+    state.hidden.forEach(function(x){x.node.visible=x.visible;});
+    state.geometries.forEach(function(g){g.dispose();});
+    if(state.g.userData.cxHands===state)delete state.g.userData.cxHands;
+  }
+  function sync(state){
+    if(state.stopped)return;
+    /* Revolver's procedural custom animator sets HLX.visible every frame. Keep
+     * exactly one complete library left hand; old child meshes stay hidden.
+     * The reload duplicate is the same rigid cup pose, NOT a speedloader pinch.
+     */
+    if(state.HLX)state.left.visible=!state.HLX.visible;
+  }
+  function install(type,g,template){
+    if(typeof THREE==='undefined')return fail('THREE unavailable');
+    if(!g||!g.userData||!g.userData.anim)return fail('Weapon not constructed');
+    if(type==='pistol')return fail('M1911 keeps its embedded hands');
+    if(!CFG[type])return fail('Unsupported weapon '+type);
+    if(g.userData.cxHands&&!g.userData.cxHands.stopped)return g.userData.cxHands.result;
+    /* Also protects future weapons with their own authored hands. */
+    if(named(g,'hand_r')||named(g,'hand_l'))return fail('Weapon already contains authored hands');
+    template=template&&(template.scene||template);if(!template)return fail('Hands template unavailable');
+    var A=g.userData.anim,refs=g.userData.cxHandsRefs||{},opts=g.userData.cxHandsOptions||{},cfg=CFG[type];
+    if(!A.LA||!contains(g,A.LA))return fail('Missing left animation carrier A.LA');
+    if(refs.HR&&!contains(g,refs.HR)||refs.HL&&!contains(A.LA,refs.HL))return fail('Hand anchor outside expected carrier');
+    if(type==='revolver'&&(!refs.HR||!refs.HL||!refs.HLX||!refs.SL||!contains(A.LA,refs.HLX)||!contains(A.LA,refs.SL)||typeof A.custom!=='function'))
+      return fail('Revolver requires cxHandsRefs={HR,HL,HLX,SL} and A.custom');
+    var state={g:g,A:A,roots:[],anchors:[],hidden:[],geometries:[],warnings:[],stopped:false};
+    try{
+      /* Snapshot OLD hands before adding anything. All tagged meshes, including
+       * hidden HLX children, are covered. No weapon or cartridge group is hidden.
+       */
+      g.traverse(function(o){if(o.isMesh&&!ownHand(o)&&o.userData.vmHand)state.hidden.push({node:o,visible:o.visible});});
+      if(type==='revolver'){
+        var extra=refs.extraHandMeshes||[],slCount=0;
+        refs.SL.traverse(function(o){
+          if(!o.isMesh)return;
+          var base=o.userData.m0||o.material;
+          var mm=Array.isArray(base)?base:[base];
+          var glove=extra.indexOf(o)>=0||mm.some(function(m){return (typeof mGlove!=='undefined'&&m===mGlove)||(typeof mGloveK!=='undefined'&&m===mGloveK);});
+          if(glove){slCount++;if(!state.hidden.some(function(x){return x.node===o;}))state.hidden.push({node:o,visible:o.visible});}
+        });
+        if(slCount!==3)throw new Error('Revolver expects three explicit SL glove meshes; expose extraHandMeshes if materials changed');
+      }
+      if(!state.hidden.length)throw new Error('No legacy hands found; avoid duplicate installation');
+      var ar=anchor(g,cfg.R,refs.HR,state),al=anchor(A.LA,cfg.L,refs.HL,state);
+      var right=copyPose(template,cfg.r,opts),left=copyPose(template,cfg.l,opts);
+      state.roots.push(right,left);ar.add(right);al.add(left);state.left=left;
+      /* Contact corrections apply only to old support geometry. GLB contract
+       * authors should set geometryMode:'contract'; never infer from load timing.
+       */
+      var dy=opts.geometryMode==='contract'?0:cfg.dy;
+      if(opts.leftCorrection){if(!finite3(opts.leftCorrection))throw new Error('Invalid leftCorrection');left.position.add(new THREE.Vector3().fromArray(opts.leftCorrection));}
+      else left.position.y+=dy;
+      fitSleeve(right,cfg.r,g,A.rw,state,opts);fitSleeve(left,cfg.l,A.LA,A.lw,state,opts);
+      if(type==='nail'&&opts.geometryMode!=='contract'&&!opts.leftCorrection)state.warnings.push('Nail contact uses provisional legacy magazine rail, not barrel');
+      if(type==='revolver'){
+        var reload=copyPose(template,cfg.l,opts);state.roots.push(reload);refs.HLX.add(reload);
+        if(opts.leftCorrection)reload.position.add(new THREE.Vector3().fromArray(opts.leftCorrection));
+        fitSleeve(reload,cfg.l,A.LA,A.lw,state,opts);state.HLX=refs.HLX;
+        state.previousCustom=A.custom;
+        state.wrapper=function(){var out=state.previousCustom.apply(this,arguments);sync(state);return out;};
+        A.custom=state.wrapper;
+        state.warnings.push('Revolver reload uses rigid cup approximation; speedloader pinch still needs authored pose');
+      }
+      state.hidden.forEach(function(x){x.node.visible=false;});sync(state);
+      state.result={ok:true,type:type,warnings:state.warnings,uninstall:function(){restore(state);}};
+      g.userData.cxHands=state;return state.result;
+    }catch(e){restore(state);return fail(String(e&&e.message||e));}
+  }
+  function load(url){
+    url=url||'models/vm_hands.glb';
+    if(pending){if(url!==pendingURL)return Promise.reject(new Error('Hands library already requested from '+pendingURL));return pending;}
+    pendingURL=url;
+    pending=new Promise(function(resolve,reject){
+      if(typeof THREE==='undefined'||!THREE.GLTFLoader){reject(new Error('GLTFLoader unavailable'));return;}
+      new THREE.GLTFLoader().load(url,resolve,undefined,reject);
+    });
+    /* ASSETS need not understand rejected optional loads; callers still receive
+     * the original rejecting promise and retain their procedural fallback.
+     */
+    if(global.ASSETS&&typeof global.ASSETS.track==='function'){
+      try{global.ASSETS.track(pending.then(function(){},function(){}),'Manos');}catch(ignore){}
+    }
+    return pending;
+  }
+  /* Called by VMGLB only AFTER the weapon swap committed. Library may load later;
+   * request token and node-map identity prevent applying a stale completion.
+   * N=null is the explicit procedural-fallback hook, called by the integrator only
+   * after that weapon's GLB attempt settled (or if no GLB attempt will be made).
+   */
+  function afterInstall(type,g,A,N,prepareMaterial){
+    if(type==='pistol'||!CFG[type]||!g||!g.userData)return Promise.resolve(fail('Hands not applicable'));
+    if(N&&(N.hand_r||N.hand_l))return Promise.resolve(fail('Weapon has embedded hands'));
+    var opts=g.userData.cxHandsOptions||{};
+    if(!opts.geometryMode)opts.geometryMode=N?'contract':'legacy';
+    if(prepareMaterial&&!opts.prepareMaterial)opts.prepareMaterial=prepareMaterial;
+    g.userData.cxHandsOptions=opts;
+    var ticket=(g.userData.cxHandsRequest||0)+1;g.userData.cxHandsRequest=ticket;
+    return load(opts.url).then(function(template){
+      if(g.userData.cxHandsRequest!==ticket||g.userData.anim!==A)return fail('Superseded hands request');
+      if(N&&global.VMG&&global.VMG.ok&&global.VMG.ok[type]&&global.VMG.ok[type].nodes!==N)return fail('Weapon model changed during hands load');
+      var result=install(type,g,template);
+      if(result.ok&&type==='revolver'&&typeof global.cxEnableRevolverSleeveTether==='function'){
+        var sleeve=global.cxEnableRevolverSleeveTether(g);
+        result.sleeveTether=sleeve;
+        if(!sleeve.ok)result.warnings.push('Reload sleeve tether unavailable: '+sleeve.reason);
+      }
+      g.userData.cxHandsLastResult=result;return result;
+    },function(e){var result=fail('Hands load failed: '+String(e&&e.message||e));
+      if(g.userData.cxHandsRequest===ticket)g.userData.cxHandsLastResult=result;return result;
+    });
+  }
+  global.cxLoadHands=load;
+  global.cxInstallHands=install;
+  global.cxHandsAfterInstall=afterInstall;
+  global.cxSyncHands=function(g){if(g&&g.userData&&g.userData.cxHands)sync(g.userData.cxHands);};
+  global.cxUninstallHands=function(g){if(g&&g.userData){g.userData.cxHandsRequest=(g.userData.cxHandsRequest||0)+1;if(g.userData.cxHands)restore(g.userData.cxHands);}};
+})(typeof window!=='undefined'?window:globalThis);
+
+/* STAGING REVIEW PATCH — no automatic install, no tests performed.
+ * Call cxEnableRevolverSleeveTether(gunModels.revolver) AFTER cxInstallHands succeeds.
+ * Requires cx_hands state/rollback contract. Touches only cloned l_cup.sleeve geometry
+ * and its private material; fingers, glove, cuff, HT, SL and reload timing are untouched.
+ * One active sleeve is recomputed from immutable base vertices during reload.
+ */
+(function(global){
+  'use strict';
+  function failure(reason){return {ok:false,reason:reason};}
+  function clamp01(n){return Math.max(0,Math.min(1,n));}
+  function smooth(n){n=clamp01(n);return n*n*(3-2*n);}
+  function cameraOf(g){var p=g;while(p){if(p.isCamera)return p;p=p.parent;}return null;}
+  function active(root,g){for(var p=root;p;p=p.parent){if(!p.visible)return false;if(p===g)return true;}return false;}
+  function removeItem(array,item){var i=array.indexOf(item);if(i>=0)array.splice(i,1);}
+
+  function enable(g,opts){
+    opts=opts||{};
+    if(typeof THREE==='undefined'||!g||!g.userData)return failure('Missing weapon/THREE');
+    var state=g.userData.cxHands,A=g.userData.anim;
+    if(!state||state.stopped||!state.result||state.result.type!=='revolver')return failure('Install revolver library hands first');
+    if(state.cxSleeveTether)return state.cxSleeveTether.result;
+    if(typeof A.custom!=='function'||A.custom!==state.wrapper)return failure('Unexpected custom animator; compose explicitly before tether');
+    var camera=opts.camera||cameraOf(g);
+    if(!camera||!camera.isCamera)return failure('Camera ancestor unavailable');
+    /* Camera-local point: lower left and near eye, outside normal gameplay framing.
+     * It never inherits A.LA translation or the revolver's reload rotation.
+     */
+    var xyz=opts.elbowCamera||[-.26,-.35,-.08];
+    if(xyz.length!==3||!xyz.every(function(v){return typeof v==='number'&&isFinite(v);}))return failure('Invalid camera elbow');
+    var target=new THREE.Vector3().fromArray(xyz),records=[],privateMaterials=[];
+    var previous=A.custom,previousStateWrapper=state.wrapper,previousUninstall=state.result.uninstall;
+    var tether={stopped:false,result:null};
+    function disposeMaterial(m){if(m&&m.dispose)m.dispose();}
+    function restoreRecords(){
+      records.forEach(function(r){
+        r.mesh.geometry=r.oldGeometry;r.mesh.material=r.oldMaterial;
+        if(r.oldM0===undefined)delete r.mesh.userData.m0;else r.mesh.userData.m0=r.oldM0;
+        removeItem(state.geometries,r.geometry);
+        /* Base adapter already disposes geometry on whole-install teardown. */
+        if(!state.stopped)r.geometry.dispose();
+      });
+      privateMaterials.forEach(disposeMaterial);
+    }
+    function disable(){
+      if(tether.stopped)return;tether.stopped=true;
+      if(!state.stopped){
+        if(A.custom===wrapper)A.custom=previous;
+        if(state.wrapper===wrapper)state.wrapper=previousStateWrapper;
+        if(state.result.uninstall===uninstallAll)state.result.uninstall=previousUninstall;
+      }
+      restoreRecords();if(state.cxSleeveTether===tether)delete state.cxSleeveTether;
+    }
+    function uninstallAll(){disable();previousUninstall();}
+    function localPoint(node,mesh){return mesh.worldToLocal(node.getWorldPosition(new THREE.Vector3()));}
+    function sleeveMaterial(old){
+      var m=old.clone();m.userData={cxHandMaterial:true};
+      var compile=old.onBeforeCompile,key=old.customProgramCacheKey;
+      m.onBeforeCompile=function(shader,renderer){
+        if(compile)compile.call(this,shader,renderer);
+        /* Claude's stock clipping plane is appropriate for buttstocks but cuts
+         * a connected forearm. Relax ONLY this sleeve's shader to 2 cm.
+         */
+        shader.fragmentShader=shader.fragmentShader.replace(/if\s*\(\s*vVmZ\s*<\s*0?\.17\s*\)\s*discard\s*;/g,'if(vVmZ<0.02)discard;');
+      };
+      m.customProgramCacheKey=function(){return (key?key.call(old):'vm')+'|cx-revolver-sleeve-near002';};
+      m.needsUpdate=true;privateMaterials.push(m);return m;
+    }
+    try{
+      state.roots.forEach(function(root){
+        if(root.name!=='l_cup')return;
+        var mesh=root.getObjectByName('l_cup.sleeve'),cuff=root.getObjectByName('l_cup.cuff_attach'),elbow=root.getObjectByName('l_cup.elbow');
+        if(!mesh||!mesh.isMesh||!cuff||!elbow)throw new Error('Incomplete left sleeve/landmarks');
+        root.updateWorldMatrix(true,true);
+        var c=localPoint(cuff,mesh),e=localPoint(elbow,mesh),axis=e.clone().sub(c),len=axis.length();
+        if(!isFinite(len)||len<.09)throw new Error('Invalid sleeve length');axis.divideScalar(len);
+        var oldGeometry=mesh.geometry,geometry=oldGeometry.clone(),pos=geometry.attributes.position;
+        var base=new Float32Array(pos.count*3),weights=new Float32Array(pos.count),v=new THREE.Vector3();
+        for(var i=0;i<pos.count;i++){
+          v.fromBufferAttribute(pos,i);base[i*3]=v.x;base[i*3+1]=v.y;base[i*3+2]=v.z;
+          weights[i]=smooth((v.sub(c).dot(axis)-.045)/(len-.045));
+        }
+        if(geometry.getAttribute('tangent'))geometry.deleteAttribute('tangent');
+        var r={root:root,mesh:mesh,oldGeometry:oldGeometry,geometry:geometry,oldMaterial:mesh.material,
+          oldM0:mesh.userData.m0,base:base,weights:weights,elbow:e,dirty:false};
+        /* Register geometry before later steps can throw. Parent rollback owns it. */
+        records.push(r);state.geometries.push(geometry);mesh.geometry=geometry;
+        mesh.material=Array.isArray(r.oldMaterial)?r.oldMaterial.map(sleeveMaterial):sleeveMaterial(r.oldMaterial);
+        /* setPap uses m0 to restore material; point it to this private sleeve material. */
+        mesh.userData.m0=mesh.material;
+      });
+      if(records.length!==2)throw new Error('Expected normal and HLX left sleeve instances');
+    }catch(e){restoreRecords();return failure(String(e&&e.message||e));}
+
+    var desired=new THREE.Vector3(),delta=new THREE.Vector3();
+    function update(f){
+      /* Smoothly enter/leave the sleeve-only correction; no transition applied to
+       * hand contacts. Exiting reload always restores base vertices exactly.
+       */
+      var blend=f>=0?smooth(f/.08)*smooth((1-f)/.12):0;
+      camera.updateWorldMatrix(true,false);
+      records.forEach(function(r){
+        var amount=active(r.root,g)?blend:0;
+        if(amount===0&&!r.dirty)return;
+        var p=r.geometry.attributes.position,base=r.base;
+        if(amount){
+          r.mesh.updateWorldMatrix(true,false);
+          desired.copy(target);camera.localToWorld(desired);r.mesh.worldToLocal(desired);
+          delta.copy(desired).sub(r.elbow).multiplyScalar(amount);
+        }else delta.set(0,0,0);
+        for(var i=0;i<p.count;i++){
+          var w=r.weights[i];p.setXYZ(i,base[i*3]+delta.x*w,base[i*3+1]+delta.y*w,base[i*3+2]+delta.z*w);
+        }
+        p.needsUpdate=true;r.geometry.computeVertexNormals();r.dirty=amount>0;
+        /* frustumCulled=false and raycast disabled by cx_hands: no per-frame bounds needed. */
+      });
+    }
+    function wrapper(){
+      var out=previous.apply(this,arguments);
+      if(!tether.stopped&&!state.stopped)update(arguments[1]);
+      return out;
+    }
+    A.custom=wrapper;state.wrapper=wrapper;state.result.uninstall=uninstallAll;
+    tether.result={ok:true,disable:disable,elbowCamera:xyz.slice(),limits:'Sleeve-only camera tether; rigid cup reload grip remains unchanged'};
+    state.cxSleeveTether=tether;
+    /* Parent API cxUninstallHands closes over restore(), bypassing result.uninstall.
+     * Compose that explicit API once so private materials are cleaned as well.
+     */
+    if(!global.cxUninstallHands.cxSleeveAware){
+      var uninstall=global.cxUninstallHands;
+      var uninstallWrapped=function(weapon){
+        var s=weapon&&weapon.userData&&weapon.userData.cxHands;
+        if(s&&s.cxSleeveTether)s.cxSleeveTether.result.disable();
+        return uninstall(weapon);
+      };
+      uninstallWrapped.cxSleeveAware=true;global.cxUninstallHands=uninstallWrapped;
+    }
+    return tether.result;
+  }
+  global.cxEnableRevolverSleeveTether=enable;
+})(typeof window!=='undefined'?window:globalThis);
 /* =====================================================
    BALIZA SENUELO  (equipo 'decoy', tecla B / boton #decoy; sale de la caja misteriosa)
    - se lanza como la granada (mas lenta), al quedarse quieta (o a los 2.5 s) se despliega: sube la antena, luz que pulsa
@@ -15087,8 +15455,11 @@ var RVL={dbg:null,v:null};
   vz(SL,mDark,.0215,.026,0,0,.004);vz(SL,mBlued,.0222,.004,0,0,-.01);vz(SL,mKnurl,.0115,.018,0,0,.022);vz(SL,mDark,.013,.004,0,0,.0315);
   for(i=0;i<6;i++){a=Math.PI/2+i*Math.PI/3;var sx=Math.cos(a)*.0125,sy=Math.sin(a)*.0125;
     vz(SL,mBrass,.0053,.032,sx,sy,-.026);vz(SL,mWear,.0047,.012,sx,sy,-.048);}
-  vp(SL,mGlove,.042,.018,.03,0,-.0215,.026);vp(SL,mGloveK,.036,.012,.02,0,.022,.03);vp(SL,mGlove,.016,.014,.03,-.026,.008,.026);   // mano que lo sostiene
+  var SLH=[vp(SL,mGlove,.042,.018,.03,0,-.0215,.026),vp(SL,mGloveK,.036,.012,.02,0,.022,.03),vp(SL,mGlove,.016,.014,.03,-.026,.008,.026)];   // mano que lo sostiene
+  SLH.forEach(function(o){o.userData.vmHand=true;});   // son piezas de mano (como las de gloveGrip): un GLB del arma no las borra y la biblioteca de manos las reemplaza; los cartuchos se quedan
   SL.visible=false;
+  /* anclajes para el adaptador de la biblioteca de manos (cx_hands.js) */
+  g.userData.cxHandsRefs={HR:HR,HL:HL,HLX:HLX,SL:SL,extraHandMeshes:SLH};
 
   addFlash(g,0,.0225,-.265,.4,0xffd9a0);setAds(g,.0475,.014,.26);
   wpkAddGun('revolver',g);
@@ -15157,8 +15528,29 @@ var RVL={dbg:null,v:null};
     CYL.rotation.z=-ST.ang;
     HM.rotation.x=hm;
     ER.position.z=-.14+rod*.03;
+    if(XS)XS.position.z=.0237+rod*.03;                         // modelo GLB: la estrella del extractor sale con la varilla
     TR.rotation.x=(f<0&&ft<.07)?.3*(1-ss(ft/.07)):0;
     /* depuracion (capturas): RVL.dbg(f) congela la recarga en esa fraccion */
+  };
+  /* MODELO GLB (models/vm_revolver.glb, lo llama a_w_vmglb.js al instalarlo): los HIJOS de cada nodo movil del GLB pasan al
+     grupo que ya mueve A.custom (mismos origenes), asi que la animacion es la misma con o sin modelo y no hay doble transformacion:
+     crane -> CR (se abre), cylinder -> CYL (gira), hammer -> HM, ejector -> ER, trigger -> TR, round_0..5 -> RB[0..5],
+     speedloader -> SL (bajo A.LA; solo visible mientras lo trae la mano izquierda) y extractor_star queda bajo CYL (XS).
+     Si falta algun nodo lanza un error y el cargador deja el revolver procedural. */
+  var XS=null;
+  A.vmglb=function(N,api){
+    var need=['crane','cylinder','hammer','ejector','trigger','speedloader'],j,moved=[],skip=[];
+    for(j=0;j<6;j++)need.push('round_'+j);
+    for(j=0;j<need.length;j++)if(!N[need[j]])throw new Error('revolver: falta el nodo '+need[j]);
+    for(j=0;j<6;j++)skip.push(N['round_'+j]);skip.push(N.cylinder);if(N.extractor_star)skip.push(N.extractor_star);
+    function undo(){moved.forEach(function(o){if(o.parent)o.parent.remove(o);});XS=null;}
+    function kids(src,dst){src.children.slice().forEach(function(c){if(skip.indexOf(c)>=0)return;dst.add(c);moved.push(c);});}
+    try{
+      kids(N.crane,CR);kids(N.cylinder,CYL);kids(N.hammer,HM);kids(N.ejector,ER);kids(N.trigger,TR);kids(N.speedloader,SL);
+      for(j=0;j<6;j++)kids(N['round_'+j],RB[j]);
+      if(N.extractor_star){CYL.add(N.extractor_star);moved.push(N.extractor_star);XS=N.extractor_star;}
+    }catch(e){undo();throw e;}
+    return {nodes:moved,undo:undo};
   };
   RVL.dbg=function(f){var w=curW();if(!w||w.type!=='revolver')return;rlTot=2.7;reloading=2.7*(1-f);};
 })();
@@ -15198,10 +15590,16 @@ WX.revolver={tp:function(g,M,pap){
    shell (cartucho en la mano), hammer, hand_r / hand_l (mano + manga, rigidas) y vacios muzzle, sight_rear, sight_front, eject.
    Lo demas es cuerpo fijo. Si el GLB no trae manos, se quedan las procedurales.
    El juego sigue animando por codigo: estos nodos se cuelgan de los grupos que ya mueve animGun (A.S, A.M, A.LA).
+   Armas con animacion propia (A.custom): el modulo del arma define A.vmglb(N,api) y cuelga el mismo sus piezas moviles
+   (ver a_w_xbow.js). Devuelve {nodes:[...],undo:function(){}}; si lanza un error se retira el modelo (todo o nada).
+   MANOS (biblioteca de Codex, cx_hands.js): cuando se resuelve el intento de carga de cada arma se llama
+   cxHandsAfterInstall(type,g,A,N,vmMat): N = nodos del GLB instalado, o null si el arma se queda procedural
+   (sin modelo registrado, sin archivo o instalacion fallida). Nunca antes de resolver ese intento.
 ===================================================== */
-var VMGLB={pistol:'models/vm_m1911.glb'};
-var VMG={on:false,ok:{},env:null,fill:.25};
-var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.38,'Glove reinforcement leather':.38,'Waxed glove stitching':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
+var VMGLB={pistol:'models/vm_m1911.glb',xbow:'models/vm_xbow.glb',revolver:'models/vm_revolver.glb',zapper:'models/vm_zapper.glb',eclipse:'models/vm_eclipse.glb',
+  rifle:'models/vm_rifle.glb',shotgun:'models/vm_shotgun.glb',smg:'models/vm_smg.glb',lmg:'models/vm_lmg.glb',sniper:'models/vm_sniper.glb'};   /* primera pasada de armas largas: candidata, no acabado final */
+var VMG={on:false,ok:{},hands:{},env:null,fill:.25};
+var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.38,'Glove reinforcement leather':.38,'Waxed glove stitching':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
 (function(){
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
   try{VMG.on=new URLSearchParams(location.search).get('vm')!=='0';}catch(_){}
@@ -15223,6 +15621,11 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
   }
   /* el arma en mano siempre se pinta delante del mundo sin perder su propio orden de profundidad:
      su profundidad se comprime al 2 % mas cercano del rango (asi no se mete en las paredes al pegarse a ellas) */
+  function vmShader(sh){
+    sh.vertexShader='varying float vVmZ;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tvVmZ=-mvPosition.z;\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');
+    /* lo que queda a menos de 17 cm del ojo (la culata bajo la mejilla al apuntar) no se dibuja: si no, tapa media pantalla */
+    sh.fragmentShader='varying float vVmZ;\n'+sh.fragmentShader.replace('void main() {','void main() {\n\tif(vVmZ<0.17)discard;');
+  }
   function vmMat(m){
     if(m.userData.vmg)return m;m.userData.vmg=true;
     m.fog=false;m.depthTest=true;m.depthWrite=true;
@@ -15242,15 +15645,11 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       else if(hk)m.color.multiplyScalar(1+hk*3.3);   /* con textura: mismo empuje, como multiplicador */
       if(!m.emissiveMap&&m.emissive&&m.emissive.getHex()===0){m.emissive.copy(m.map?new THREE.Color(0xffffff):m.color).multiplyScalar(hk?.1:VMG.fill);if(m.map)m.emissiveMap=m.map;}
     }
-    m.onBeforeCompile=function(sh){
-      sh.vertexShader='varying float vVmZ;\n'+sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tvVmZ=-mvPosition.z;\n\tgl_Position.z=(gl_Position.z/gl_Position.w*.02-.98)*gl_Position.w;');
-      /* lo que queda a menos de 17 cm del ojo (la culata bajo la mejilla al apuntar) no se dibuja: si no, tapa media pantalla */
-      sh.fragmentShader='varying float vVmZ;\n'+sh.fragmentShader.replace('void main() {','void main() {\n\tif(vVmZ<0.17)discard;');
-    };
+    m.onBeforeCompile=vmShader;
     m.customProgramCacheKey=function(){return 'vmg';};
     /* Forja Lunar: la misma malla con la textura viva de la Forja encima (setPap cambia a userData.pap) */
     var p=m.clone();p.userData={vmg:true};p.color.multiplyScalar(.55);p.emissive=new THREE.Color(0xffffff);p.emissiveMap=papTex;p.emissiveIntensity=.6;
-    p.onBeforeCompile=m.onBeforeCompile;p.customProgramCacheKey=function(){return 'vmg';};m.userData.pap=p;
+    p.onBeforeCompile=vmShader;p.customProgramCacheKey=function(){return 'vmg';};m.userData.pap=p;
     m.needsUpdate=true;return m;
   }
   /* Todo o nada: si cualquier paso falla se retira el modelo y vuelve el arma procedural tal como estaba. */
@@ -15276,10 +15675,82 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       if(d.emissive){m.emissive.setRGB(d.emissive[0],d.emissive[1],d.emissive[2]);m.emissiveIntensity=Math.min(1.5,d.emissiveIntensity||1);m.userData.kitEmit=true;}
       if(d.opacity!=null&&d.opacity<1){m.transparent=true;m.opacity=d.opacity;m.depthWrite=false;}
       /* relleno propio del arma, igual que vmMat pero ya con su textura */
-      if(!m.userData.kitEmit){m.emissive.copy(m.color).multiplyScalar(.14);m.emissiveMap=m.map||null;}
-      if(m.userData.pap){var p=m.userData.pap;p.map=m.map;p.normalMap=m.normalMap;p.roughnessMap=m.roughnessMap;p.metalnessMap=m.metalnessMap;p.roughness=m.roughness;p.metalness=m.metalness;p.color.copy(m.color).multiplyScalar(.55);p.needsUpdate=true;}
+      if(!m.userData.kitEmit){m.emissive.copy(m.color).multiplyScalar(.3);m.emissiveMap=m.map||null;}
+      if(m.userData.pap){var p=m.userData.pap;p.map=m.map;p.normalMap=m.normalMap;if(p.normalScale&&m.normalScale)p.normalScale.copy(m.normalScale);p.roughnessMap=m.roughnessMap;p.metalnessMap=m.metalnessMap;p.roughness=m.roughness;p.metalness=m.metalness;p.color.copy(m.color).multiplyScalar(.55);p.needsUpdate=true;}
       m.needsUpdate=true;
     });
+  }
+  /* ARMAS DE ENERGIA (animGun de r_weap.js anima colores y escalas de piezas procedurales): tabla por tipo.
+     mats  = [nodo del GLB, material animado del arma (A.zc cuerpo, A.zk celda, A.zr[i] anillo)]: las mallas de ese nodo reciben un
+             material propio (nunca el wk_emit global del kit) que copia cada cuadro el color del material animado -> late,
+             se apaga al recargar y cambia con la Forja igual que el procedural.
+     rings = nodos del GLB que sustituyen a A.rings (escala de reposo 1): reciben la escala del anillo antiguo dividida por A.rs0.
+     keep  = piezas PROCEDURALES que siguen visibles con el GLB (efectos que el modelo no trae): pasan a pintarse con
+             profundidad, como el modelo, para que la carcasa nueva pueda taparlas. Nunca quedan las dos versiones a la vez. */
+  var VMFX={
+    zapper:{mats:[['energy_body','zc'],['cell_energy','zk'],['energy_ring_0','zr',0],['energy_ring_1','zr',1],['energy_ring_2','zr',2]],
+            rings:['energy_ring_0','energy_ring_1','energy_ring_2']},
+    eclipse:{mats:[['energy_body','zc'],['energy_cell','zk']],
+             /* se conservan los tres anillos, el orbe (el halo es un Sprite y no se toca) y el reticulo luminoso de la mira (anillo + punto) */
+             keep:function(o,A){var m=o.userData.m0||o.material;return A.rings.indexOf(o)>=0||o===A.orb||(m===A.zc&&o.geometry===gTor)||m===mVio;}}
+  };
+  function fxMat(src){var m=new THREE.MeshBasicMaterial({color:src.color.getHex(),fog:false});m.name='vm_fx';m.userData.vmg=true;m.onBeforeCompile=vmShader;m.customProgramCacheKey=function(){return 'vmg';};return m;}
+  function fxSet(o,mm,src,undo){
+    var prev={m:o.material,m0:o.userData.m0,ro:o.renderOrder,br:o.onBeforeRender};
+    undo.push(function(){o.material=prev.m;if(prev.m0===undefined)delete o.userData.m0;else o.userData.m0=prev.m0;o.renderOrder=prev.ro;o.onBeforeRender=prev.br;});
+    o.material=mm;o.userData.m0=mm;o.renderOrder=90;o.onBeforeRender=function(){mm.color.copy(src.color);};   /* m0: para que setPap no devuelva el material anterior */
+  }
+  function fxBind(fx,A,N,kept,undo){
+    (fx.mats||[]).forEach(function(d){
+      var nd=N[d[0]],src=d[2]!=null?(A[d[1]]&&A[d[1]][d[2]]):A[d[1]],n=0;
+      if(!nd||!src||!src.color)throw new Error('falta el nodo o el material de energia '+d[0]);
+      var mm=fxMat(src);nd.traverse(function(o){if(o.isMesh){fxSet(o,mm,src,undo);n++;}});
+      if(!n)throw new Error('nodo de energia sin mallas: '+d[0]);
+    });
+    if(fx.rings){
+      var r0=A.rings,rs0=A.rs0||1;undo.push(function(){A.rings=r0;});
+      A.rings=fx.rings.map(function(nm){var nd=N[nm];if(!nd)throw new Error('falta el nodo '+nm);return {scale:{setScalar:function(v){nd.scale.setScalar(v/rs0);}}};});
+    }
+    kept.forEach(function(o){var src=o.userData.m0||o.material;if(src&&src.color)fxSet(o,fxMat(src),src,undo);});
+  }
+  /* copia de un material ya preparado para el arma en mano (para piezas que necesitan el suyo: luz que parpadea...) */
+  function vmClone(m,kit){var c=m.clone();c.userData={};c=vmMat(c);if(kit!==false)kitApply(c);return c;}
+  /* ARMA PROCEDURAL + MANOS DE LA BIBLIOTECA. El arma procedural se pinta por orden de creacion y sin profundidad
+     (depthTest:false), y las manos nuevas con profundidad real: sin ayuda el arma las taparia enteras (se pinta despues)
+     o quedarian enteras por encima. Solucion: tras pintar el arma se dibuja una copia SOLO DE PROFUNDIDAD de sus piezas
+     (no escribe color; misma profundidad comprimida que vmMat) y despues las manos, que asi quedan detras de lo que el
+     arma tiene delante y delante de lo demas. La copia cuelga de cada pieza: hereda su movimiento y su visibilidad. */
+  var OCC_ORDER=20000,occM=null;
+  function occMat(){
+    if(occM)return occM;
+    occM=new THREE.MeshBasicMaterial({colorWrite:false,fog:false});occM.userData.vmg=true;
+    /* un pelo mas lejos (0.4 %, unos 2 mm) para que el guante gane donde toca la superficie del arma */
+    occM.onBeforeCompile=function(sh){sh.vertexShader=sh.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n\tvec4 vmB=projectionMatrix*vec4(mvPosition.xyz*1.004,1.0);\n\tgl_Position.z=(vmB.z/vmB.w*.02-.98)*gl_Position.w;');};
+    occM.customProgramCacheKey=function(){return 'vmocc';};
+    return occM;
+  }
+  function occlude(g){
+    var list=[],m=occMat();
+    g.traverse(function(o){
+      if(!o.isMesh||o.userData.vmOcc)return;
+      if(o.userData.cxHand){o.renderOrder=OCC_ORDER+1;return;}
+      if(o.userData.vmHand||!o.material||o.material.transparent)return;   /* manos viejas (ocultas) y lentes: sin copia */
+      list.push(o);
+    });
+    list.forEach(function(o){var d=new THREE.Mesh(o.geometry,m);d.userData.vmOcc=true;d.renderOrder=OCC_ORDER;d.frustumCulled=false;d.raycast=function(){};o.add(d);});
+  }
+  /* MANOS de la biblioteca: N = nodos del GLB instalado, o null = el arma se queda procedural. Una sola vez por arma. */
+  var handsAsked={};
+  function hands(type,N){
+    if(handsAsked[type]||typeof cxHandsAfterInstall!=='function')return;
+    var g=gunModels[type];if(!g||!g.userData.anim)return;handsAsked[type]=true;
+    try{
+      var pr=cxHandsAfterInstall(type,g,g.userData.anim,N||null,vmMat);
+      if(pr&&typeof pr.then==='function')pr.then(function(r){
+        VMG.hands[type]=r&&r.ok?'ok':String(r&&r.reason||'?');
+        if(r&&r.ok&&!N){try{occlude(g);}catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}}
+      },function(){VMG.hands[type]='error';});
+    }catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}
   }
   function install(type,gltf){
     var g=gunModels[type];if(!g)return 'sin arma '+type;
@@ -15294,15 +15765,22 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       if(Array.isArray(o.material))o.material=o.material.map(vmMat);else o.material=vmMat(o.material);
       (Array.isArray(o.material)?o.material:[o.material]).forEach(kitApply);
     });
-    var old=[],moved=[],fl=g.userData.flash,keep={fp:fl.position.clone(),mz:g.userData.mz.clone(),ads:g.userData.ads,eye:g.userData.adsEye,post:A.post};
+    var old=[],moved=[],xundo=null,fx=VMFX[type],kept=[],fxUndo=[],fl=g.userData.flash,keep={fp:fl.position.clone(),mz:g.userData.mz.clone(),ads:g.userData.ads,eye:g.userData.adsEye,post:A.post};
     /* si el GLB no trae manos, las manos y mangas procedurales (userData.vmHand) se quedan */
-    g.traverse(function(o){if(o.isMesh&&(hasHands||!o.userData.vmHand))old.push(o);});
+    g.traverse(function(o){
+      if(!o.isMesh)return;
+      if(fx&&fx.keep&&fx.keep(o,A)){kept.push(o);return;}   /* efectos procedurales que el modelo no trae: se quedan */
+      if(hasHands||!o.userData.vmHand)old.push(o);
+    });
     try{
       /* 2) pose de reposo y colgar: attach conserva la posicion de reposo de cada nodo respecto al grupo que lo anima */
       if(A.S)A.S.position.z=0;if(A.CH)A.CH.position.z=0;if(A.PG)A.PG.position.z=0;if(A.BT){A.BT.position.z=0;A.BT.rotation.z=0;}
       if(A.M&&A.M0){A.M.position.copy(A.M0);A.M.rotation.x=A.Mr0;A.M.visible=true;}if(A.LA)A.LA.position.set(0,0,0);
       g.add(root);g.updateMatrixWorld(true);
       for(var pk in PARTS){var nd=N[pk],gr=A[PARTS[pk]];if(nd&&gr){gr.attach(nd);moved.push(nd);}}
+      /* armas con animacion propia: el modulo del arma cuelga sus piezas moviles de los grupos que mueve su A.custom */
+      if(fx)fxBind(fx,A,N,kept,fxUndo);
+      if(typeof A.vmglb==='function'){var ex=A.vmglb(N,{g:g,root:root,mat:vmClone});if(ex){xundo=ex.undo||null;(ex.nodes||[]).forEach(function(o){moved.push(o);});}}
       /* martillo: gira sobre su propio eje lo mismo que el procedural */
       if(N.hammer){var h0=N.hammer.rotation.x;A.post=function(w,f,dt,back){N.hammer.rotation.x=h0+back*10;};}
       /* boca y miras salen del modelo, no de numeros fijos */
@@ -15313,10 +15791,12 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
       old.forEach(function(o){o.userData.vmVis=o.visible;o.visible=false;});
       VMG.ok[type]={root:root,nodes:N,old:old};
       if(g.userData.pap)setPap(type,true);
-      /* gancho para el adaptador de la biblioteca de manos (Codex): se llama una vez por arma ya instalada */
-      if(typeof cxHandsAfterInstall==='function'){try{cxHandsAfterInstall(type,g,A,N,vmMat);}catch(e){try{console.warn('manos GLB:',e&&e.message);}catch(_){}}}
+      /* manos de la biblioteca (Codex): una vez por arma, ya con el modelo instalado */
+      hands(type,N);
       return '';
     }catch(e){
+      if(xundo){try{xundo();}catch(_){}}
+      fxUndo.reverse().forEach(function(u){try{u();}catch(_){}});
       moved.forEach(function(o){if(o.parent)o.parent.remove(o);});if(root.parent)root.parent.remove(root);
       old.forEach(function(o){if(o.userData.vmVis!==undefined)o.visible=o.userData.vmVis;});
       fl.position.copy(keep.fp);g.userData.mz.copy(keep.mz);g.userData.ads=keep.ads;g.userData.adsEye=keep.eye;A.post=keep.post;delete VMG.ok[type];
@@ -15327,12 +15807,24 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
     var p=new Promise(function(ok){
       new THREE.GLTFLoader().load(VMGLB[type],function(gl){
         var err='';try{err=install(type,gl);}catch(e){err=String(e&&e.message||e);}   /* install ya deshace lo suyo si falla */
-        if(err){try{console.warn('modelo '+VMGLB[type]+' no usado: '+err);}catch(_){}}
+        if(err){try{console.warn('modelo '+VMGLB[type]+' no usado: '+err);}catch(_){}hands(type,null);}   /* arma procedural: manos nuevas igual */
         ok();
-      },null,function(){ok();});   /* sin archivo o sin red: se queda el arma procedural, sin aviso */
+      },null,function(){hands(type,null);ok();});   /* sin archivo o sin red: se queda el arma procedural, sin aviso */
     });
     if(window.ASSETS&&typeof ASSETS.track==='function'){try{ASSETS.track(p,'Armas');}catch(_){}}
   });
+  /* La biblioteca de manos busca sus nodos por el nombre del glTF con punto ('r_rifle.sleeve', '.cuff_attach', '.elbow'), pero
+     GLTFLoader quita los puntos al cargar (queda 'r_riflesleeve') y entonces cx_hands.js no encuentra nada y deja todas las
+     mangas sin ajustar al codo de cada arma. Aqui se devuelve a cada nodo su nombre original (GLTFLoader lo guarda en
+     userData.name) ANTES de que el adaptador use la plantilla: este then queda registrado primero sobre la misma promesa. */
+  if(typeof cxLoadHands==='function'&&typeof cxHandsAfterInstall==='function'){try{
+    cxLoadHands('models/vm_hands.glb').then(function(gl){
+      var sc=gl&&(gl.scene||gl);if(sc&&sc.traverse)sc.traverse(function(o){var n=o.userData&&o.userData.name;if(typeof n==='string'&&n&&n!==o.name)o.name=n;});
+    },function(){});
+  }catch(_){}}
+  /* armas sin modelo registrado: reciben las manos nuevas sobre su arma procedural. Se difiere al final del guion
+     porque varios modulos de armas (a_w_xbow.js, a_zend.js) se construyen despues de este archivo. */
+  setTimeout(function(){Object.keys(gunModels).forEach(function(t){if(!VMGLB[t])hands(t,null);});},0);
 })();
 /* =====================================================
    BALLESTA EXPLOSIVA (xbow) — paquete de armas
@@ -15438,8 +15930,41 @@ var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.38,'Wrist cuff':.
     seg(A.cA,tx,LY,tz,0,LY,nzz);seg(A.cB,-tx,LY,tz,0,LY,nzz);
     /* punta roja del virote parpadea mientras hay uno cargado */
     var on=Math.sin(A.t*11)>0?1:.16;mTipR.color.setRGB(on,.13*on,.09*on);
+    if(A.tipM)A.tipM.emissiveIntensity=1.4*on;                         // lo mismo en el modelo GLB (material propio del virote)
     /* retroceso suave */
     g.position.z+=.016*kick;g.position.y+=.004*kick;
+  };
+  /* manos de la biblioteca (cx_hands.js): anclajes de los dos agarres */
+  g.userData.cxHandsRefs={HR:HR,HL:HL};
+  /* MODELO GLB (models/vm_xbow.glb, lo llama a_w_vmglb.js al instalarlo): las piezas moviles del GLB pasan a los grupos
+     que ya mueve A.custom, asi que la animacion es la misma con o sin modelo y no hay doble transformacion:
+     - limb_R / limb_L: sus HIJOS se cuelgan de A.limbs[0] / A.limbs[1] (mismo origen; el giro lo sigue ASIGNANDO A.custom)
+     - cord_R / cord_L: mallas de cilindro unitario en Y; pasan a ser A.cA / A.cB y seg() les escribe posicion, giro y largo
+     - bolt_loaded: sus hijos van a A.BR (virote en el riel) y una copia a A.BHb (virote en la mano), sin sumar otra vez .0415
+     Si falta algun nodo lanza un error y el cargador deja la ballesta procedural. */
+  A.vmglb=function(N,api){
+    var need=['limb_R','limb_L','cord_R','cord_L','bolt_loaded'],i,moved=[],keep={cA:A.cA,cB:A.cB};
+    for(i=0;i<need.length;i++)if(!N[need[i]])throw new Error('ballesta: falta el nodo '+need[i]);
+    if(!N.cord_R.isMesh||!N.cord_L.isMesh)throw new Error('ballesta: cord_R / cord_L deben ser mallas');
+    function undo(){moved.forEach(function(o){if(o.parent)o.parent.remove(o);});A.cA=keep.cA;A.cB=keep.cB;A.tipM=null;}
+    function kids(src,dst,copy){
+      src.children.slice().forEach(function(c){
+        if(copy){c=c.clone(true);c.traverse(function(o){if(o.isMesh)o.raycast=function(){};});}
+        dst.add(c);moved.push(c);
+      });
+    }
+    try{
+      kids(N.limb_R,A.limbs[0]);kids(N.limb_L,A.limbs[1]);
+      api.g.add(N.cord_R);api.g.add(N.cord_L);moved.push(N.cord_R,N.cord_L);A.cA=N.cord_R;A.cB=N.cord_L;
+      /* la luz del virote comparte material con el punto de la mira: recibe uno propio (rojo, como el procedural) para parpadear sola */
+      N.bolt_loaded.traverse(function(o){
+        if(!o.isMesh||!o.material||o.material.name!=='wk_emit')return;
+        if(!A.tipM){A.tipM=api.mat(o.material,false);A.tipM.color.setRGB(.5,.05,.03);A.tipM.emissive.setRGB(1,.13,.09);A.tipM.emissiveMap=null;A.tipM.emissiveIntensity=1.4;}
+        o.material=A.tipM;
+      });
+      kids(N.bolt_loaded,A.BHb,true);kids(N.bolt_loaded,A.BR);
+    }catch(e){undo();throw e;}
+    return {nodes:moved,undo:undo};
   };
   wpkAddGun('xbow',g);
 

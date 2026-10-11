@@ -8794,11 +8794,31 @@ function stepY(x,z){
   curRI=null;
 })();
 
+/* revestimiento de pared (luz dominante por sala): paneles opacos y mate pegados al muro que bajan el valor del
+   blanco/crema/lavanda de las paredes. zocalo [0,hLo] en lo y franja [hLo,techo-.12] en hi; salta puertas, ventanas y skip(cx,cz,dir) */
+function wallClad(ri,lo,hi,hLo,skip){
+  ROOMS[ri].cells.forEach(function(k){
+    if(RD[k])return;
+    var cx=k%GW,cz=(k/GW)|0,base=FH[k],top=CE[k];
+    DIRS_.forEach(function(dir){
+      var v=DV[dir];if(ctAt(cx+v[0],cz+v[1])!==0)return;
+      if(WINSET[cx+','+cz+','+dir])return;
+      if(skip&&skip(cx,cz,dir))return;
+      var f=wallF(cx,cz,dir);f.y=base;
+      wbox(lo,f,0,hLo/2,.011,TS-.03,hLo,.022);
+      wbox(hi,f,0,hLo+(top-base-.12-hLo)/2,.011,TS-.03,top-base-.12-hLo,.022);
+    });
+  });
+}
+var DIRS_=['w','e','n','s'];
+
 /* =====================================================
    5) DORMITORIOS (sala 2, segundo piso) y PASARELA al ala medica
 ===================================================== */
 (function(){
   curRI=2;var F=3.6;
+  /* paredes: zocalo oliva oscuro y paño cálido apagado (la crema original quemaba la vista) */
+  wallClad(2,ph(0x14150f),ph(0x24201a),1.0);
   /* literas (props): colchon, litera superior, postes y cajones; el lado largo va en z */
   [[-6.8,-30],[-6.8,-19.6]].forEach(function(p,k){
     var x=p[0],z=p[1];
@@ -8825,7 +8845,11 @@ function stepY(x,z){
   });
   /* alfombra y charco calido en el centro de la sala (solo marcas, sin colision) */
   floorDecal(mDecal,3,-24,3.6,2.6,0,decUV('rug'),.008);
-  quad(poolMat(0xffb070),3,F+.02,-24,6.0,5.0,-H_,0);
+  quad(poolMat(0x8a5428),3,F+.02,-24,5.4,4.4,-H_,0);   /* única luz cálida dominante: charco ámbar contenido sobre la alfombra */
+  /* lamparitas de cabecera (residencial): pequeñas y cálidas, sobre cada cama de la pared norte */
+  [-4.1,2.7,8.9].forEach(function(lx){
+    bx(mTrimD,lx,F+1.45,-31.93,.2,.14,.1);bx(eWarm,lx,F+1.45,-31.87,.12,.07,.03);glowQuad(lx,F+1.4,-31.8,.95,.95,0,0x7a4a22);
+  });
   /* pantalla con la Tierra en la pared oeste, entre la litera y la puerta */
   var fW=WFp(-8,-27.5,'w',F);
   wbox(mTrimD,fW,0,1.85,.04,2.3,1.7,.08);wquad(mView,fW,0,1.85,.085,2.14,1.54,AR(1024,1024,[110,520,820,446]));
@@ -8877,10 +8901,10 @@ function stepY(x,z){
 (function(){
   curRI=3;
   var RX=34,RZ=-2,CEg=ROOMS[3].ceil;
-  var coreM=C(mE,0x8ff0ff);
+  var coreM=C(mE,0x6fcfe0),eIce=C(mE,0x3e8c9c);   /* el reactor es frío (cian); el ámbar queda para la palanca */
   /* reactor sobre el tanque existente (r 1.6, alto 3.5) */
   cyl(mSteelD,RX,.09,RZ,2.05,.18,20);
-  [.55,1.5,2.45].forEach(function(y){cyl(eAmber,RX,y,RZ,1.67,.12,20);});
+  [.55,1.5,2.45].forEach(function(y){cyl(mSteelD,RX,y,RZ,1.67,.12,20);cyl(eIce,RX,y,RZ,1.675,.03,20);});
   for(var i=0;i<8;i++){var a=i/8*Math.PI*2,c=Math.cos(a),s=Math.sin(a);
     bx(i%2?mSteelD:coreM,RX+c*1.63,1.6,RZ+s*1.63,i%2?.16:.12,i%2?3.0:1.7,.06,Math.atan2(c,s));}
   [[.75,.75],[-.75,.75],[.75,-.75],[-.75,-.75]].forEach(function(p){
@@ -8888,11 +8912,11 @@ function stepY(x,z){
     [5.0,6.6].forEach(function(y){cyl(mSteelD,RX+p[0],y,RZ+p[1],.26,.14,10);});
   });
   floorDecal(mDecal,RX,RZ,6.4,6.4,0,decUV('ring'),.014);
-  var core=glowSprite(3,RX,1.8,RZ,5.2,0x7fe8ff,.4);
-  floorDecal(poolMat(0x7fe8ff),RX,RZ,8.4,8.4,0,null,.02);
+  var core=glowSprite(3,RX,1.8,RZ,3.6,0x6fcfe0,.3);
+  floorDecal(poolMat(0x2c6672),RX,RZ,7.0,7.0,0,null,.02);
   /* turbinas pegadas a las paredes norte y sur; la pantalla mira a la sala */
   function turbine(cx,cz,face){
-    bx(mSteelD,cx,.18,cz,3.4,.36,1.5);bx(eAmber,cx,.2,cz-.76,3.0,.05,.01);bx(eAmber,cx,.2,cz+.76,3.0,.05,.01);
+    bx(mSteelD,cx,.18,cz,3.4,.36,1.5);
     cyl(mTankC,cx,1.05,cz,.7,2.5,16,0,0,H_);
     [-1.25,0,1.25].forEach(function(o){cyl(mSteelD,cx+o,1.05,cz,.78,.12,16,0,0,H_);});
     cyl(mSteel,cx+1.45,1.05,cz,.55,.4,14,0,0,-H_,.75);cyl(mSteel,cx-1.45,1.05,cz,.5,.4,14,0,0,H_,.7);
@@ -8911,17 +8935,17 @@ function stepY(x,z){
   /* tuberias grandes por la pared norte (sin cruzar la escalera) con valvulas */
   var NZ=-10+.25;
   [[22,28],[34,46]].forEach(function(sg){
-    rod(mSteel,sg[0],2.85,NZ,sg[1],2.85,NZ,.17,10);rod(mRedP,sg[0],3.2,NZ+.1,sg[1],3.2,NZ+.1,.12,8);
+    rod(mSteel,sg[0],2.85,NZ,sg[1],2.85,NZ,.17,10);rod(mSteelD,sg[0],3.2,NZ+.1,sg[1],3.2,NZ+.1,.12,8);
     for(var bxp=sg[0]+1;bxp<sg[1];bxp+=2.5)bx(mSteelD,bxp,3.05,NZ-.1,.1,1.1,.12);
   });
-  [24.6,36.4,43.2].forEach(function(x){put(mRedP,GTOR,x,2.85,NZ+.25,.3,.3,.3,0,0,0);rod(mSteelD,x,2.85,NZ+.05,x,2.85,NZ+.25,.04,4);cyl(mSteelD,x+.5,2.85,NZ,.22,.12,10,0,0,H_);});
+  [24.6,36.4,43.2].forEach(function(x){put(mSteelD,GTOR,x,2.85,NZ+.25,.3,.3,.3,0,0,0);rod(mSteelD,x,2.85,NZ+.05,x,2.85,NZ+.25,.04,4);cyl(mSteelD,x+.5,2.85,NZ,.22,.12,10,0,0,H_);});
   quad(mDecal,24.2,1.9,-9.97,3.2,.4,0,0,decUV('volt'));
   /* tubos del reactor a las paredes por el techo (dejan libres puertas y ventanas) */
   rod(mSteel,RX+1.2,3.3,RZ,45.7,3.3,RZ,.2,10);rod(mSteel,RX-1.2,3.3,RZ,23.2,3.3,RZ,.2,10);
   [[RX+3.5,RZ],[RX-3.5,RZ]].forEach(function(p){cyl(mSteelD,p[0],3.3,p[1],.27,.5,10,0,0,H_);});
   /* tableros electricos en la pared oeste (esquina noroeste) */
   var fW=WFp(22,-8.2,'w',0);
-  [-.95,0,.95].forEach(function(a,k){wbox(mSteel,fW,a+.3,1.15,.2,.86,1.9,.4);wquad(mPrint,fW,a+.3,1.25,.405,.8,.8,prUV('breaker'));
+  [-.95,0,.95].forEach(function(a,k){wbox(mSteelD,fW,a+.3,1.15,.2,.86,1.9,.4);wquad(mPrint,fW,a+.3,1.25,.405,.8,.8,prUV('breaker'));
     wbox(k===1?eRedL:eGreenL,fW,a+.6,2.0,.405,.06,.06,.01);});
   obstacles.push({x:22.2,z:-8.2,hw:.21,hd:1.45,h:2,y0:0});
   /* tuberias verticales y manometros en la pared oeste (sur) */
@@ -8929,18 +8953,30 @@ function stepY(x,z){
   wquad(mPrint,WFp(22,2.1,'w',0),0,2.3,.6,.5,.5,prUV('panel'));
   /* capacitores brillantes pegados a la pared norte, lado este */
   [41,45].forEach(function(x){var z=-10+.42;
-    cyl(mSteelD,x,.2,z,.4,.4,12);cyl(mSteelD,x,2.0,z,.4,.25,12);cyl(coreM,x,1.1,z,.18,1.4,10);cyl(eAmber,x,1.1,z,.3,.06,12);
+    cyl(mSteelD,x,.2,z,.4,.4,12);cyl(mSteelD,x,2.0,z,.4,.25,12);cyl(eIce,x,1.1,z,.18,1.4,10);cyl(mSteelD,x,1.1,z,.3,.06,12);
     [0,1.57,3.14,4.71].forEach(function(b){bx(mSteel,x+Math.cos(b)*.33,1.1,z+Math.sin(b)*.33,.04,1.5,.04);});
     rod(mSteel,x,2.12,z,x,CEg,z,.09,8);
     addObs(.9,2.2,.9,x,z);
   });
+  /* PALANCA DE ENERGIA (27,-9.9): marco y baliza ámbar, tapete de peligro y flechas hacia ella, suelo gastado; la única zona ámbar de la sala */
+  (function(){
+    var LX=27,LZ=-9.9,fL=WFp(LX-.5,-10,'n',0);
+    [-.63,.63].forEach(function(o){wbox(eAmber,fL,o+.5,1.6,.245,.05,2.2,.02);});
+    wbox(eAmber,fL,.5,2.7,.245,1.31,.05,.02);wbox(eAmber,fL,.5,.5,.245,1.31,.05,.02);
+    wbox(mSteelD,fL,.5,2.95,.09,1.5,.22,.18);bx(eAmber,LX,2.95,LZ+.2,.9,.06,.02);
+    glowQuad(LX,1.6,LZ+.3,3.2,3.6,0,0x9a560c);
+    tquad(mHazF,LX,.013,-8.3,2.6,.5,-H_,0,.7);
+    floorDecal(mDecal,LX,-7.2,1.0,1.0,0,decUV('arrow'),.014);floorDecal(mDecal,LX,-5.9,1.0,1.0,0,decUV('arrow'),.014);
+    quad(poolMat(0xd08018),LX,.02,-8.0,4.6,3.6,-H_,0);
+    quad(MK(0x0b0b0c),LX,.016,-8.4,3.2,2.4,-H_,0,fxUV('soot'));
+  })();
   /* pantalla de estado sobre el tablero de la palanca */
   wbox(mTrimD,WFp(24.2,-10,'n',0),0,1.7,.04,1.1,.6,.06);wquad(mScreen,WFp(24.2,-10,'n',0),0,1.7,.075,1.0,.5,scUV('react'));
   /* vigas y bandejas de cable cruzando el techo alto */
   [-6,4].forEach(function(z){bx(mSteelD,34,CEg-1.2,z,24,.3,.3);rod(mCable,22,CEg-1.0,z-.1,46,CEg-1.0,z-.1,.04,4);rod(mCable,22,CEg-1.0,z+.1,46,CEg-1.0,z+.1,.04,4);});
   decorTick.push(function(dt){
     var k=power?(.85+Math.sin(time*3.1)*.15):(.35+Math.sin(time*1.3)*.1);
-    core.material.opacity=k*.5;core.scale.setScalar(power?5.2+Math.sin(time*3.1)*.4:4.0);
+    core.material.opacity=k*.38;core.scale.setScalar(power?3.6+Math.sin(time*3.1)*.3:2.8);
   });
   curRI=null;
 })();
@@ -8950,11 +8986,14 @@ function stepY(x,z){
 ===================================================== */
 (function(){
   curRI=4;
+  wallClad(4,ph(0x1c1f1a),ph(0x32352b),1.0);   /* paredes mate para que el piso (flechas y sello) sea lo más legible */
   /* piso: rejilla de descontaminacion, bordes de peligro, flechas, texto */
   tquad(mGrate,0,.012,13,5.8,5.8,-H_,0,1);
   tquad(mHazF,0,.013,10.4,5.8,.3,-H_,0,.7);tquad(mHazF,0,.013,15.75,3.9,.3,-H_,0,.7);
   floorDecal(mDecal,1.1,12.4,3.2,.6,H_,decUV('decomp'));
-  floorDecal(mDecal,-1.1,13.6,.9,.9,Math.PI,decUV('arrow'));floorDecal(mDecal,-1.1,11.2,.9,.9,0,decUV('arrow'));
+  /* flechas todas hacia la salida (sur) por el carril central y sello (anillo de peligro) en el umbral de la boca */
+  floorDecal(mDecal,0,11.0,1.15,1.15,Math.PI,decUV('arrow'),.014);floorDecal(mDecal,0,12.55,1.15,1.15,Math.PI,decUV('arrow'),.014);
+  floorDecal(mDecal,0,14.95,2.7,2.7,0,decUV('ring'),.014);tquad(mHazF,0,.0135,13.7,3.9,.28,-H_,0,.7);
   /* laminas de traje en los casilleros existentes (dos por lado) */
   [-1,1].forEach(function(s){[11.2,13.0].forEach(function(z){
     quad(mPrint,s*3.15-s*.004,1.1,z,.86,2.1,0,s>0?-H_:H_,prUV('lock'));
@@ -8981,7 +9020,7 @@ function stepY(x,z){
     var sp=glowSprite(4,p[0],3.32,p[1],1.2,0xff3a1a,.8);
     beacons.push({rot:rot,sp:sp,bm:bm});
   });
-  floorDecal(poolMat(0xff3a1a),1.3,11.4,4,4,0,null,.02);floorDecal(poolMat(0xff3a1a),1.3,14.6,4,4,0,null,.02);
+  floorDecal(poolMat(0xb85a14),1.3,11.4,3.2,3.2,0,null,.02);floorDecal(poolMat(0xb85a14),1.3,14.6,3.2,3.2,0,null,.02);
   decorTick.push(function(dt){
     beacons.forEach(function(b,i){b.rot.rotation.y+=dt*(power?3.2:5.0);var k=.55+.45*Math.max(0,Math.sin(time*(power?6.4:10)+i));b.sp.material.opacity=k;b.bm.color.setHex(power?0xff9a1a:0xff3a1a);b.sp.material.color.setHex(power?0xff9a1a:0xff3a1a);});
   });
@@ -8994,12 +9033,26 @@ function stepY(x,z){
 (function(){
   curRI=6;
   var CX=-36,CZ=-42,CEo=ROOMS[6].ceil;
+  /* paredes: acero azul-carbón mate; la nave queda sin muro claro y la Forja se enmarca aparte */
+  wallClad(6,ph(0x13161b),ph(0x1f242c),1.1);
+  lamps.forEach(function(L){if(L.room===6)L.col.multiplyScalar(.8);});
+  floorDecal(mDecal,-36.6,-37.2,.9,.9,0,decUV('arrow'),.014);floorDecal(mDecal,-35.6,-34.6,.9,.9,0,decUV('arrow'),.014);   /* flechas hacia la Forja desde la puerta */
+  bx(C(mE2,0x6a3cc0),-35.0,3.0,-32.07,1.2,.1,.03);bx(mSteelD,-35.0,3.0,-32.04,1.4,.2,.05);   /* símbolo (franja violeta) de la Forja junto a la puerta */
+  /* FORJA (recompensa): nicho oscuro en la pared norte con marco de acero, dintel con franja violeta y pastilla en el piso */
+  (function(){
+    var FX=-35,fF=WFp(FX,-52,'n',0);
+    wbox(C(mE2,0x08090d),fF,0,1.85,.016,5.4,3.6,.02);
+    [-2.8,2.8].forEach(function(a){wbox(mSteelD,fF,a,1.85,.12,.3,3.7,.24);wbox(mSteel,fF,a*.97,1.85,.25,.06,3.5,.04);});
+    wbox(mSteelD,fF,0,3.7,.14,6.0,.34,.3);wbox(C(mE2,0x6a3cc0),fF,0,3.5,.3,5.2,.06,.04);
+    glowQuad(FX,3.2,-51.3,5.4,1.8,0,0x2a1450);
+    floorDecal(mDecal,FX,-49.2,3.4,3.4,0,decUV('ring'),.02);floorDecal(poolMat(0x4a2a8a),FX,-49.2,4.6,4.6,0,null,.024);
+  })();
   /* telescopio sobre el pilar existente (-32,-46.8) */
   var SX=-32,SZ=-46.8,pitch=-Math.PI/3.2,yaw=.7;
   cyl(mSteelD,SX,.1,SZ,1.2,.2,16);cyl(mSteelD,SX,2.45,SZ,.72,.1,16);
   [-1,1].forEach(function(s){bx(mSteel,SX+s*.5,3.0,SZ,.12,1.1,.42);});
   put(mSteelD,gcyl(10),SX,2.85,SZ,.2,1.0,.2,0,0,0);
-  put(mWhite,gcyl(16),SX,3.2,SZ,.42,3.4,.42,pitch,yaw,0);
+  put(mSteel,gcyl(16),SX,3.2,SZ,.42,3.4,.42,pitch,yaw,0);
   put(mSteelD,gcyl(16),SX,3.2,SZ,.45,.5,.45,pitch,yaw,0);
   var dir=new THREE.Vector3(0,1,0).applyEuler(new THREE.Euler(pitch,yaw,0,'YXZ'));
   cyl(mVoid,SX+dir.x*1.705,3.2+dir.y*1.705,SZ+dir.z*1.705,.4,.01,16,pitch,yaw,0);
@@ -9019,8 +9072,8 @@ function stepY(x,z){
   wquad(mView,wf,0,2.35,.02,6.0,2.3,AR(1024,1024,[0,520,1024,500]));
   wbox(mSteelD,wf,0,1.15,.1,6.3,.14,.24);wbox(mSteelD,wf,0,3.55,.06,6.3,.18,.14);
   [-3,-1,1,3].forEach(function(a){wbox(mSteelD,wf,a,2.35,.06,.1,2.5,.12);});
-  floorDecal(poolMat(0x6aa8ff),-43.4,-42,3.6,7.0,0,null,.02);
-  glowQuad(wx(wf,0,.3),2.3,wz(wf,0,.3),6.6,3.4,wf.ry,0x14284a);
+  floorDecal(poolMat(0x2a4672),-43.4,-42,3.2,6.2,0,null,.02);
+  glowQuad(wx(wf,0,.3),2.3,wz(wf,0,.3),6.6,3.4,wf.ry,0x0a1830);
   var dz0=-44.4,dz1=-39.6,dm=(dz0+dz1)/2,dx=-45.3;
   bx(mCounterC,dx,.5,dm,.8,1.0,dz1-dz0);bx(mTrimD,dx,1.02,dm,.84,.04,dz1-dz0+.04);
   [-1.6,0,1.6].forEach(function(o,kk){
@@ -9047,8 +9100,8 @@ function stepY(x,z){
   [-.5,.5].forEach(function(a){wbox(mLockerC,fL,a,1.1,.3,.9,2.2,.5);wquad(mPrint,fL,a,1.1,.552,.86,2.1,prUV('lock'));});
   addObs(1.9,2.2,.5,-31,-32.3);
   /* rosa de los vientos en el piso, bajo la rendija, y charco azul */
-  quad(MK(0x6aa8ff),CX,.02,CZ,9.2,9.2,-H_,0,fxUV('compass'));
-  floorDecal(poolMat(0x6aa8ff),CX,CZ,6,6,0,null,.022);
+  quad(MK(0x3e5e8e),CX,.02,CZ,9.2,9.2,-H_,0,fxUV('compass'));
+  floorDecal(poolMat(0x2a4672),CX,CZ,5,5,0,null,.022);
   /* tuberia de refrigeracion del telescopio y papeles */
   rod(mSteel,-45.7,CEo-.5,-50,-26.4,CEo-.5,-50,.09,8);rod(mTealP,-45.7,CEo-.62,-49.8,-26.4,CEo-.62,-49.8,.07,8);
   put(mSheet,GB,-31,.012,-43.4,.3,.01,.22,0,.5,0);put(mSheet,GB,-30.6,.013,-43.1,.28,.01,.2,0,-.3,0);
@@ -9396,9 +9449,13 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   curRI=12;
   var ECX=PLACES.eclipse[0],ECZ=PLACES.eclipse[1],i,k;
   function inEc(x,z,r){return Math.hypot(x-ECX,z-ECZ)<1.55+(r||0);}
+  /* huesos mates y apagados (antes blanco puro que aplanaba la bóveda); se restaura el color al final de la sala */
+  lamps.forEach(function(L){if(L.room===12)L.col.multiplyScalar(.55);});   /* lámparas de la bóveda más tenues: menos conos violeta/blancos apilados */
+  var _boneHex=mBone.col.getHex();mBone.col.setHex(0x4c483f);
+  wallClad(12,ph(0x14171a),ph(0x1f2420),1.0);   /* paredes carbón-oliva: el lila ambiente ya no llena la sala */
   var mDeadScr=ph(0x07090c),mVeinM=new THREE.MeshBasicMaterial({map:fxT,color:0xa24cff,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-5,polygonOffsetUnits:-5,side:THREE.DoubleSide});
-  PULSE.push({m:mVeinM,base:.8});
-  var mHaloQ=pulseMat(0x8a3cff,.5,glowS);
+  PULSE.push({m:mVeinM,base:.38});
+  var mHaloQ=pulseMat(0x8a3cff,.3,glowS);
   /* ---------- ANTESALA ---------- */
   /* consolas apagadas pegadas a la pared norte (el cuarto es frio: escarcha en las pantallas) */
   var fN=WFp(51.4,20,'n',0);
@@ -9440,13 +9497,16 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   cryo(51.0,31.2,2.2,false);cryo(53.5,31.2,2.2,true);
   addObs(2.4,.9,1.2,51.0,31.4);addObs(2.4,.9,1.2,53.5,31.4);
   /* cajas de suministros y estanteria */
-  [[55.3,31.3,1.45,1.1],[55.1,29.9,.9,.9]].forEach(function(c){boxPrint(c[0],.5,c[1],c[2],1.0,c[3],sR(-.2,.2));});
-  boxPrint(55.3,1.5,31.3,1.2,.9,.9,.3);addObs(1.5,1.3,1.1,55.3,31.3);
-  boxPrint(48.55,.5,22.6,1.0,1.0,1.0,.2);addObs(1.1,1.0,1.1,48.55,22.6);
+  /* cajas oliva mate con franja oscura (antes naranja/blanco brillante) */
+  var mCrO=ph(0x3e4636),mCrB=ph(0x232a22);
+  function oBox(x,y,z,w,h,d,ry){bx(mCrO,x,y,z,w,h,d,ry);bx(mCrB,x,y+h*.12,z,w+.02,.12,d+.02,ry);bx(mCrB,x,y-h*.3,z,w+.02,.05,d+.02,ry);}
+  [[55.3,31.3,1.45,1.1],[55.1,29.9,.9,.9]].forEach(function(c){oBox(c[0],.5,c[1],c[2],1.0,c[3],sR(-.2,.2));});
+  oBox(55.3,1.5,31.3,1.2,.9,.9,.3);addObs(1.5,1.3,1.1,55.3,31.3);
+  oBox(48.55,.5,22.6,1.0,1.0,1.0,.2);addObs(1.1,1.0,1.1,48.55,22.6);
   var fWs=WFp(48,29.2,'w',0);
   [.05,.85,1.65].forEach(function(y){wbox(mSteelD,fWs,0,y+.1,.25,.5,.05,1.3);});
-  [-.65,.65].forEach(function(a){wbox(mOrange,fWs,a,1.05,.25,.5,2.2,.06);});
-  wbox(mPrint,fWs,-.2,.5,.27,.4,.55,.5);wbox(mPrint,fWs,.3,1.3,.27,.4,.5,.5);wbox(mTankC,fWs,0,2.0,.27,.4,.35,1.0);
+  [-.65,.65].forEach(function(a){wbox(mTrimD,fWs,a,1.05,.25,.5,2.2,.06);});
+  wbox(mCrO,fWs,-.2,.5,.27,.4,.55,.5);wbox(mCrO,fWs,.3,1.3,.27,.4,.5,.5);wbox(mTankC,fWs,0,2.0,.27,.4,.35,1.0);
   addObs(.5,2.2,1.4,48.25,29.2);
   /* cartel del puesto y pintada en la pared este */
   wquad(mXp,WFp(49.8,20,'n',0),0,2.6,.04,1.9,.475,xpUV('icaro'));
@@ -9458,22 +9518,22 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   cableCurve([50,3.55,25],[52,2.0,26.5],.0,.03,mCable,5);cableCurve([54,3.55,24],[54.6,1.4,24.8],.0,.03,mCable,5);
   /* arrastre y sangre: sigue el rastro desde la puerta hasta la boveda */
   for(var t=0;t<10;t+=2.9){var xa=48+t,xb=Math.min(57,xa+2.9);
-    quad(MK(0xc9c2b6),(xa+xb)/2,.027,26,1.5,xb-xa+.3,-H_,H_,fxUV('groove'));quad(MK(0x2a0807),(xa+xb)/2,.03,26,1.4,xb-xa+.3,-H_,H_,fxUV('smear'));}
+    quad(MK(0x8c877d),(xa+xb)/2,.027,26,1.5,xb-xa+.3,-H_,H_,fxUV('groove'));quad(MK(0x2a0807),(xa+xb)/2,.03,26,1.4,xb-xa+.3,-H_,H_,fxUV('smear'));}
   quad(MK(0x2a0807),47.7,.033,26,2.8,2.8,-H_,sR(0,6),fxUV('splat'));
   [[50.5,24.2],[53.2,27.6],[52,25.4]].forEach(function(p){quad(MK(0x2a0807),p[0],.034,p[1],1.5,1.5,-H_,sR(0,6),fxUV('splat'));});
-  quad(MK(0xd9ecff),50,.025,28,5,4,-H_,0,fxUV('frost'));quad(MK(0xd9ecff),54.5,.025,23.5,3.5,3.5,-H_,1,fxUV('frost'));
+  quad(MK(0x7f94a2),50,.025,28,5,4,-H_,0,fxUV('frost'));quad(MK(0x7f94a2),54.5,.025,23.5,3.5,3.5,-H_,1,fxUV('frost'));
   quad(MK(0x0b0b0c),52,.018,26,9,9,-H_,0,fxUV('soot'));
   /* ---------- BOVEDA DEL COLOSO ---------- */
   /* venas moradas que laten, saliendo del centro (planas; el pedestal queda encima) */
-  for(i=0;i<9;i++){var a=i/9*Math.PI*2+sR(-.2,.2),r=sR(1.8,2.6);quad(mVeinM,ECX+Math.cos(a)*r,.04,ECZ+Math.sin(a)*r,sR(3.4,4.4),sR(3.4,4.4),-H_,sR(0,6.28),fxUV('crack'));}
+  for(i=0;i<9;i++){var a=i/9*Math.PI*2+sR(-.2,.2),r=sR(1.8,2.6),vw=sR(3.4,4.4),vh=sR(3.4,4.4),vr=sR(0,6.28);if(i%2===0||i===1)quad(mVeinM,ECX+Math.cos(a)*r,.04,ECZ+Math.sin(a)*r,vw,vh,-H_,vr,fxUV('crack'));}
   quad(mHaloQ,ECX,.045,ECZ,8.4,8.4,-H_,0);
   quad(MK(0x050507),ECX,.02,ECZ,9,7.5,-H_,0,fxUV('soot'));
   quad(MK(0x2a0807),ECX-.8,.036,ECZ+.3,3.6,3.6,-H_,sR(0,6),fxUV('splat'));
   /* marcas de garras en el piso y tajos enormes en las paredes */
-  [[57.4,23.2,.3],[57.6,28.6,2.8],[60.8,23.5,1.2],[61.0,28.5,5.5]].forEach(function(c){quad(MK(0xe6e0d4),c[0],.038,c[1],1.5,2.8,-H_,c[2],fxUV('claw'));});
+  [[57.4,23.2,.3],[57.6,28.6,2.8],[60.8,23.5,1.2],[61.0,28.5,5.5]].forEach(function(c){quad(MK(0x9a948a),c[0],.038,c[1],1.5,2.8,-H_,c[2],fxUV('claw'));});
   [[59,22,0,2.1],[61.2,22,0,1.7],[57.4,22,0,2.5],[58.2,30,Math.PI,2.0],[60.6,30,Math.PI,2.4]].forEach(function(g){
-    quad(MK(0xffffff),g[0],g[3],g[1]+(g[2]?-.03:.03),1.9,.95,0,g[2],fxUV('gash'));});
-  [[24,2.0],[26.3,2.5],[28,1.8]].forEach(function(g){quad(MK(0xffffff),61.97,g[1],g[0],1.9,.95,0,-H_,fxUV('gash'));quad(MK(0x2a0807),61.97,g[1]-.9,g[0]+.3,1.2,1.2,0,-H_,fxUV('splat'));});
+    quad(MK(0x9a948a),g[0],g[3],g[1]+(g[2]?-.03:.03),1.9,.95,0,g[2],fxUV('gash'));});
+  [[24,2.0],[26.3,2.5],[28,1.8]].forEach(function(g){quad(MK(0x9a948a),61.97,g[1],g[0],1.9,.95,0,-H_,fxUV('gash'));quad(MK(0x2a0807),61.97,g[1]-.9,g[0]+.3,1.2,1.2,0,-H_,fxUV('splat'));});
   /* costillar enorme (restos de algo muy grande) contra la pared este y una caja toracica menor al norte */
   function ribs(sx,sz,dx,dz,n,sc,sideX,sideZ){   /* columna a lo largo de (dx,dz); costillas arqueadas hacia (sideX,sideZ) */
     var len=n*.5*sc;rod(mBone,sx,.28*sc,sz,sx+dx*len,.28*sc,sz+dz*len,.08*sc,7);
@@ -9505,13 +9565,13 @@ function decalDir(fx,fz){return Math.atan2(-fx,-fz);}
   bxr(mSteelD,59.3,.3,29.6,1.4,.5,.9,.3,.2,.2);bxr(mDeadScr,59.9,.65,29.5,.7,.5,.05,-.5,.3,.2);bxr(mSteel,58.4,.18,29.4,.9,.3,.6,0,.7,-.3);
   [[57,23],[58.5,22.4],[61.4,29.7],[57.2,29.6],[61.6,25.6]].forEach(function(p){rod(mDark,p[0],3.6,p[1],p[0]+sR(-.2,.2),sR(1.4,2.2),p[1]+sR(-.2,.2),.05,5);put(mDark,GSPH,p[0],1.5,p[1],.12,.22,.12,0,0,0);});
   /* luz morada que late: halo grande bajo el techo y paneles de luz de las paredes */
-  var halo=glowSprite(12,ECX,2.2,ECZ,8,0x7a2cff,.5);
-  [[61.9,26,-H_],[59,22.05,0],[59,29.95,Math.PI]].forEach(function(p){quad(mHaloQ,p[0]*(p[2]===-H_?1:1),2.0,p[1],5.2,2.8,0,p[2]);});
+  var halo=glowSprite(12,ECX,2.2,ECZ,5.4,0x7a2cff,.3);
   decorTick.push(function(){
     var tt=time*1.9,beat=Math.pow(Math.max(0,Math.sin(tt*3.0)),6)+.55*Math.pow(Math.max(0,Math.sin(tt*3.0-.95)),6),kk=.3+.7*Math.min(1,beat);
     for(var j=0;j<PULSE.length;j++)PULSE[j].m.opacity=PULSE[j].base*kk;
-    halo.material.opacity=.22+.5*kk;halo.scale.setScalar(7+kk*1.8);
+    halo.material.opacity=.1+.26*kk;halo.scale.setScalar(5+kk*1.2);
   });
+  mBone.col.setHex(_boneHex);
   curRI=null;
 })();
 
@@ -10405,12 +10465,14 @@ var mGlass=new THREE.MeshPhongMaterial({vertexColors:true,transparent:true,opaci
 var mER=new THREE.MeshBasicMaterial({vertexColors:true});   /* rojo de emergencia (bateria: late, sigue en apagones) */
 var mEG=new THREE.MeshBasicMaterial({vertexColors:true});   /* verde enfermo que parpadea */
 var mES=new THREE.MeshBasicMaterial({vertexColors:true});   /* siempre encendido (barras quimicas) */
+var mEGw=new THREE.MeshBasicMaterial({vertexColors:true});   /* luz clinica blanca-fria apagada: el verde intenso es solo del aislamiento */
+var mAdGw=new THREE.MeshBasicMaterial({map:addT,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 var mAdR=new THREE.MeshBasicMaterial({map:addT,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 var mAdG=new THREE.MeshBasicMaterial({map:addT,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 var mAdS=new THREE.MeshBasicMaterial({map:addT,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 function ph(c){return C(mPr,c);}
 var cSteel=ph(0x7c868c),cSteelD=ph(0x30373c),cRust=ph(0x5a3424),cRustD=ph(0x3a2418),cPipeG=ph(0x4a544c),cCable=ph(0x121315),cConc=ph(0x55524e),
-  cWhite=ph(0x9ea29c),cMedG=ph(0x6e8078),cYel=ph(0xb8901e),cRed=ph(0x7a1612),cBlood=ph(0x2c0503),cBloodD=ph(0x1c0302),
+  cWhite=ph(0x70746e),cMedG=ph(0x44544e),cYel=ph(0xb8901e),cRed=ph(0x7a1612),cBlood=ph(0x2c0503),cBloodD=ph(0x1c0302),
   cSkin=C(mPrDS,0x56524a),cSkinD=C(mPrDS,0x3e3a34),cHair=C(mPrDS,0x141210),cBoot=C(mPrDS,0x161514),cOrange=C(mPrDS,0x452614),cGrey=C(mPrDS,0x262c32),cCoat=C(mPrDS,0x5c5a54),cBag=ph(0x16181b),cBagW=ph(0xb8bcb6),cBagO=ph(0x8a3a14),
   cWood=ph(0x5a4028),cMatt=ph(0x7a8a90),cCan=ph(0x9aa0a2),cBottle=ph(0x5a7a8a),cSheet=ph(0xbcc0b8);
 
@@ -10571,7 +10633,8 @@ function snapStep(x){return Math.floor(x*2)/2+.25;}
         wdec(f,hR(-1+gw/2,1-gw/2)*.9,hR(1.25,1.5),gw,hR(2.2,2.6),'grime',{flip:hr()<.5,off:.012});
         if(hr()<.3)wdec(f,hR(-1+ww/2,1-ww/2)*.9,hR(.35,.6),ww,hR(.5,.8),'water',{col:q[1],flip:hr()<.5,off:.013});
       });
-      if(hr()<q[2])fdec(x0+hR(.4,1.6),z0+hR(.4,1.6),hR(1.4,2.4),hR(1.0,1.6),hr()*6,'water',{col:q[1],lift:.01});
+      if(hr()<q[2]){var fa=[x0+hR(.4,1.6),z0+hR(.4,1.6),hR(1.4,2.4),hR(1.0,1.6),hr()*6];
+        if(ri===REN)fdec(fa[0],fa[1],fa[2],fa[3],fa[4],'water',{col:q[1],lift:.01});}   /* en tuneles y camara el charco tapaba el piso: se consume el azar pero no se pinta */
     });
   });
   /* cables sueltos cruzando el techo de los tuneles, papeles y escombros en el piso */
@@ -10633,12 +10696,15 @@ function snapStep(x){return Math.floor(x*2)/2+.25;}
     rod(cSteelD,wx(f,-.62,.035),fyw(f,-.62)+.3,wz(f,-.62,.035),wx(f,.62,.035),fyw(f,.62)+.3,wz(f,.62,.035),.04,4,true);
     if(!broke){
       rod(mER,wx(f,-.55,.062),fyw(f,-.55)+.3,wz(f,-.55,.062),wx(f,.55,.062),fyw(f,.55)+.3,wz(f,.55,.062),.0175,4,true);
-      if(flat)quad(mAdR,wx(f,0,.42),f.y+.008,wz(f,0,.42),1.9,.8,-H_,f.ry+PI,UVLIN);
-      quad(mAdR,wx(f,0,.03),f.y+.55,wz(f,0,.03),1.7,.6,0,f.ry,UVRAD);}
-    else if(hr()<.5)rod(cCable,wx(f,.3,.05),f.y+.3,wz(f,.3,.05),wx(f,.45,.2),f.y+.02,wz(f,.45,.2),.012,4);
+      if(flat)quad(mAdR,wx(f,0,.42),f.y+.008,wz(f,0,.42),1.5,.6,-H_,f.ry+PI,UVLIN);
+      quad(mAdR,wx(f,0,.03),f.y+.55,wz(f,0,.03),1.4,.5,0,f.ry,UVRAD);}
+    else{
+      if(hr()<.5)rod(cCable,wx(f,.3,.05),f.y+.3,wz(f,.3,.05),wx(f,.45,.2),f.y+.02,wz(f,.45,.2),.012,4);
+      /* la tira rota sigue encendida en la mitad: la guia baja nunca se corta del todo */
+      rod(mER,wx(f,-.55,.062),fyw(f,-.55)+.3,wz(f,-.55,.062),wx(f,-.05,.062),fyw(f,-.05)+.3,wz(f,-.05,.062),.0175,4,true);}
     /* mugre */
     if(hr()<.75)wdec(f,hR(-.4,.4),hR(1.6,2.0),hR(.6,1.0),hR(1.6,2.2),'grime',{col:0xffffff,flip:hr()<.5});
-    if(hr()<.35)fdec(wx(f,hR(-.6,.6),.35),wz(f,hR(-.6,.6),.35),hR(.8,1.3),hR(.5,.8),f.ry,'water',{col:0x8a8a8a});
+    if(hr()<.35){var wa=[wx(f,hR(-.6,.6),.35),wz(f,hR(-.6,.6),.35),hR(.8,1.3),hR(.5,.8)];}   /* sin mancha de agua en el piso del tunel (consume el mismo azar) */
   });
   /* fugas: oxido en la pared, charco, goteo y vapor */
   [[9,13,'e',.2,1],[8,15,'w',.5,0],[13,14,'n',.3,1],[17,15,'s',-.3,0],[19,14,'n',-.2,0],[11,15,'s',.4,1]].forEach(function(L){
@@ -10674,7 +10740,7 @@ function snapStep(x){return Math.floor(x*2)/2+.25;}
     wb(f,cSteelD,.5,1.95,.07,.42,.16,.12);
     [-.12,.12].forEach(function(o,i){var px=wx(f,.5+o,.16),pz=wz(f,.5+o,.16);
       cyl(L[3]&&i===0?mER:cSteelD,px,f.y+2.07,pz,.055,.08,8,H_,f.ry,0);});
-    if(L[3])quad(mAdR,wx(f,.4,.05),f.y+2.0,wz(f,.4,.05),1.6,1.4,0,f.ry,UVRAD);
+    if(L[3])quad(mAdR,wx(f,.4,.05),f.y+2.0,wz(f,.4,.05),1.2,1.0,0,f.ry,UVRAD);
     else{rod(cCable,wx(f,.5,.1),f.y+1.88,wz(f,.5,.1),wx(f,.62,.14),f.y+1.45,wz(f,.62,.14),.01,4);rod(cCable,wx(f,.4,.1),f.y+1.88,wz(f,.4,.1),wx(f,.35,.12),f.y+1.6,wz(f,.35,.12),.01,4);}
   });
 
@@ -10767,6 +10833,38 @@ var beacon=null;
     cyl(cSteelD,t[0],.12,t[1],1.08,.24,14);
   });
   quad(mPn,-34.0,1.85,9.2-1.035,.62,.3,0,PI,puv('sVap'));quad(mPn,-42.0,1.85,16.8-1.035,.62,.3,0,PI,puv('sVap'));
+  /* camisa mate de acero oscuro sobre los dos tanques (el metal original reflejaba la lampara y se quemaba) */
+  var cTankJ=ph(0x1d2320),cTankB=ph(0x141917);
+  [[-34,9.2],[-42,16.8]].forEach(function(t){cyl(cTankJ,t[0],1.62,t[1],1.02,2.76,18);cyl(cTankB,t[0],3.03,t[1],1.03,.07,18);
+    /* ventana de nivel: franja cian apagada vertical en la cara que mira a la puerta */
+    bx(C(mES,0x1e6272),t[0],1.6,t[1]-1.03,.1,2.0,.03);});
+  /* PARED DE BOMBAS (sur, frente a la puerta): fondo oscuro, tres bombas con manometro, colector cian y franja de nivel de agua;
+     es el unico esquema de tuberias de la sala (cian = agua) y lo que se ve al entrar */
+  (function(){
+    var zw=Z1-.02,cCy=ph(0x2f7f92),cCyD=ph(0x1e4d5a),cAm=ph(0xb8801a);
+    bx(cSteelD,-37.5,1.9,zw-.01,12.8,3.8,.03);
+    bx(cConc,-37.5,.09,zw-.18,12.8,.18,.34);
+    rod(cCy,X0+.8,3.3,zw-.12,X1-.8,3.3,zw-.12,.13,10);rod(cCyD,X0+.8,2.8,zw-.1,X1-.8,2.8,zw-.1,.08,8);
+    bx(C(mES,0x2790a8),-37.5,3.3,zw-.255,12.0,.09,.01);bx(C(mES,0x1e6272),-37.5,2.8,zw-.235,12.0,.05,.01);
+    [-42.6,-39.9,-33.4].forEach(function(x,i){
+      var fl=i===0,z=Z1-(fl?.32:.55),dp=fl?.24:.55;   /* la primera es una caja plana pegada al muro (no estrecha el rincon del refugio) */
+      bx(cConc,x,.13,z,1.3,.26,fl?.4:.7);
+      bx(cPipeG,x,1.0,z,1.0,1.5,dp);bx(cSteelD,x,1.8,z,1.1,.12,dp+.07);bx(cSteelD,x,.4,z,1.08,.1,dp+.05);
+      cyl(cSteelD,x,.95,z-dp/2-.02,.28,.08,12,H_);                    /* tapa de inspeccion */
+      rod(cCy,x,1.86,z,x,3.3,z,.09,8);sph(cCy,x,3.3,z,.14,.14,.14);
+      bx(C(mES,0x1e7a90),x,1.62,z-dp/2-.012,.8,.07,.012);bx(C(mES,0x1e7a90),x,.78,z-dp/2-.012,.8,.05,.012);   /* franjas de estado cian: se reconocen desde la puerta */
+      put(cAm,GTOR,x+.3,1.5,z-dp/2-.05,.18,.18,.18,0,0,0);           /* volante de valvula: unico toque amarillo */
+      quad(mPn,x-.15,1.52,z-dp/2-.01,.26,.26,0,PI,puv('gauge'));
+      quad(i===1?C(mPn,0xb0a8a0):mPn,x,.55,z-dp/2-.01,.7,.17,0,PI,puv(i===1?'plate2':'plate'));
+      if(!fl)obs(1.3,1.8,.6,x,z,0);
+    });
+    /* franja de nivel de agua alrededor de la sala (cian apagado, sigue las paredes sin ventana ni puerta) */
+    ROOMS[RCB].cells.forEach(function(k){var cx=k%GW,cz=(k/GW)|0;
+      ['n','s','e','w'].forEach(function(dir){
+        if(!isWall(cx,cz,dir)||WINS[cx+','+cz+','+dir])return;var f=wallF(cx,cz,dir);
+        wb(f,C(mES,0x1f7488),0,.82,.02,2.0,.08,.015);wb(f,cCyD,0,.74,.015,2.0,.05,.012);
+      });});
+  })();
   /* tablero con pantalla de contencion en la pared este */
   var fE=wallF(11,33,'e');
   wb(fE,cSteelD,0,1.15,.17,1.1,1.7,.34);
@@ -10788,8 +10886,7 @@ var beacon=null;
   beacon={rot:rot,sp:bsp};
   /* piso inundado: agua oscura con sangre mezclada y desague */
   curRI=RCB;
-  fdec(-37.6,13.6,5.6,3.8,0,'puddle');fdec(-40.2,11.4,3.2,2.6,.6,'puddle');fdec(-33.8,14.6,3.0,2.4,2.1,'puddle');
-  fdec(-36.2,17.2,3.4,2.2,.3,'water');fdec(-39.0,9.0,3.0,2.0,.9,'water');
+  fdec(-37.6,13.6,4.6,3.2,0,'puddle');fdec(-33.8,14.6,2.4,1.9,2.1,'puddle');
   fdec(-38.6,13.0,1.8,1.8,1.1,'pool',{col:0xb07070});
   fdec(-36.2,15.2,1.0,1.0,0,'grate',{m:mPn,col:0x9a9a9a,lift:.006});
   emit(RCB,'drip',-41.6,4.1,Z0+.5,1.8,[.38,.42,.46]);emit(RCB,'drip',-38.2,4.1,Z0+.5,1.1,[.38,.42,.46]);emit(RCB,'drip',-34,4.15,9.2,1.2,[.38,.42,.46]);
@@ -10884,7 +10981,7 @@ var surg=null;
   }
   bed(24.3,'n',1);bed(29.8,'n',0,true);bed(32.2,'n',2);bed(22.4,'s',2);bed(25.6,'s',0);
   /* monitor entre las camas del norte */
-  bx(cSteelD,31.0,F+.55,Z0+.25,.08,1.1,.08);bx(cSteelD,31.0,F+1.25,Z0+.3,.5,.36,.12);quad(C(mGP,0x9affb0),31.0,F+1.25,Z0+.362,.44,.3,0,0,puv('mon'));
+  bx(cSteelD,31.0,F+.55,Z0+.25,.08,1.1,.08);bx(cSteelD,31.0,F+1.25,Z0+.3,.5,.36,.12);quad(C(mGP,0xb8d8d0),31.0,F+1.25,Z0+.362,.44,.3,0,0,puv('mon'));
   /* cinta de cuarentena frente a las camas, rota */
   function tape(ax,ay,az,bx2,by,bz,k,w){var L=Math.hypot(bx2-ax,bz-az,by-ay),ry=Math.atan2(-(bz-az),bx2-ax),u=hr();
     var R2=PR[k||'tapeY'],v0=1-(R2[1]+R2[3]-1)/1024,v1=1-(R2[1]+1)/1024;
@@ -11000,14 +11097,14 @@ var surg=null;
   surg=groupMesh(REN,SX,ce-.35,SZ,function(){
     rod(cSteel,SX,ce-.35,SZ,SX,F+2.5,SZ,.03,6);
     put(cWhite,gcyl(14,.55),SX,F+2.42,SZ,.38,.16,.38);
-    put(mEG,gcyl(14),SX,F+2.335,SZ,.33,.01,.33);
+    put(mEGw,gcyl(14),SX,F+2.335,SZ,.33,.01,.33);
   });
-  quad(C(mAdG,0x808080),SX,F+.01,SZ,2.2,2.2,-H_,0,UVRAD);
+  quad(C(mAdGw,0x808080),SX,F+.01,SZ,1.8,1.8,-H_,0,UVRAD);
   /* caja de luz con radiografia en la pared oeste y el letrero de cuarentena en la este */
   var fX=wallF(37,12,'w');
   wb(fX,cSteelD,-.3,1.75,.05,.6,.8,.1);
   wq(fX,mGP,-.3,1.75,.105,.45,.68,puv('xray'));
-  wq(fX,mAdG,-.3,1.75,.12,1.6,1.6,UVRAD);
+  wq(fX,mAdGw,-.3,1.75,.12,1.2,1.2,UVRAD);
   var fQ=wallF(46,13,'e');
   wdec(fQ,0,2.2,1.5,.75,'sQ',{m:mPn,off:.02});wdec(fQ,0,1.25,.6,.6,'bio',{m:mPn,off:.02});
   wdec(fQ,.3,1.5,1.6,1.6,'splat2',{col:0xc09090});wdec(fQ,-.6,.9,1.0,1.0,'holes');
@@ -11018,12 +11115,19 @@ var surg=null;
   [[.5,2.0,.0],[.2,2.35,.3],[.55,2.7,-.2],[.3,3.0,.25]].forEach(function(h,i){wdec(fW,h[0],h[1],.55,.55,'hands',{rz:h[2],flip:i%2===1});});
   wdec(wallF(37,13,'w'),.3,1.1,1.1,1.6,'smearV');
   /* luces verdes enfermas en las paredes */
-  [[37,10,'w',-.5],[43,9,'n',0],[46,13,'e',.5],[38,16,'s',0],[41,16,'s',.4],[46,16,'e',0],[46,15,'e',-.3]].forEach(function(L){
+  [[37,10,'w',-.5],[43,9,'n',0],[46,13,'e',.5],[38,16,'s',0],[41,16,'s',.4]].forEach(function(L){   /* sin luces junto al cartel del Revolver (este, z -24..-21) */
     if(!isWall(L[0],L[1],L[2])||WINS[L[0]+','+L[1]+','+L[2]])return;
     var f=wallF(L[0],L[1],L[2]);
-    wb(f,cSteelD,L[3],2.55,.05,.8,.1,.1);wb(f,mEG,L[3],2.5,.1,.7,.03,.03);
-    wq(f,mAdG,L[3],2.2,.03,2.4,1.6,UVRAD);
+    wb(f,cSteelD,L[3],2.55,.05,.8,.1,.1);wb(f,mEGw,L[3],2.5,.1,.7,.03,.03);
+    wq(f,mAdGw,L[3],2.2,.03,1.8,1.2,UVRAD);
   });
+  /* marco oscuro tras el cartel del Revolver (pared este, cartel de 2.6 x 1.3 a 1.7 m): el texto verde se lee sobre carbon, sin brillo detras */
+  (function(){var fR=wallF(46,15,'e');
+    var cRv=ph(0x101315);wb(fR,cRv,0,1.7,.012,2.9,1.6,.02);wb(fR,cRv,0,.55,.03,2.9,.5,.06);wb(fR,cSteelD,0,.82,.065,2.9,.04,.04);})();
+  /* pared este a lo largo del cartel: paño oscuro mate (el azulejo claro se quemaba con la linterna y borraba el cartel) */
+  (function(){var cWd=ph(0x182022);[12,13,14,15,16].forEach(function(cz){if(!isWall(46,cz,'e')||WINS[46+','+cz+',e'])return;var f=wallF(46,cz,'e');wb(f,cWd,0,(ce-F-.12)/2,.011,1.97,ce-F-.12,.022);});})();
+  /* aislamiento: unico verde intenso de la sala (charco en el piso del cubiculo) */
+  quad(mAdG,37,F+.014,-32,3.4,3.4,-H_,0,UVRAD);
   /* cinta rota colgando de las jambas del nicho de entrada */
   tape(X0+.1,F+1.3,-25.9,X0+.18,F+.4,-25.6);tape(X0+.1,F+1.25,-22.1,X0+.3,F+.7,-22.5);
   /* biohazard en el piso, papeles, suero tirado */
@@ -11139,9 +11243,9 @@ function stepPts(o,dt,add,glob){
 decorTick.push(function(dt){
   var t=time,bk=blackK||0;
   var pr=.6+.4*Math.pow(.5+.5*Math.sin(t*2.1),3);
-  mER.color.setRGB(pr,.13*pr,.07*pr);mAdR.color.setRGB(.8*pr,.09*pr,.05*pr);
+  mER.color.setRGB(pr,.13*pr,.07*pr);mAdR.color.setRGB(.6*pr,.07*pr,.04*pr);
   var fl=flick(t),gk=(power?fl:(.16+.12*fl))*(1-bk);
-  mEG.color.setRGB(.5*gk,gk,.62*gk);mAdG.color.setRGB(.3*gk,.75*gk,.4*gk);
+  mEG.color.setRGB(.5*gk,gk,.62*gk);mAdG.color.setRGB(.3*gk,.75*gk,.4*gk);mEGw.color.setRGB(.5*gk,.58*gk,.6*gk);mAdGw.color.setRGB(.2*gk,.27*gk,.3*gk);
   mGP.color.setScalar((power?(fl<.5?.35:1):.3)*(1-bk*.8));
   mAdS.color.setScalar(.8+.05*Math.sin(t*1.3));
   if(beacon&&vis(RCB)){beacon.rot.rotation.y+=dt*2.8;beacon.sp.material.opacity=.45+.55*pr;beacon.sp.scale.setScalar(1.4+pr*.5);}
@@ -14869,8 +14973,10 @@ var DCY={on:false,t:0,rel:false,pool:[]};
   var HOME=new THREE.Vector3(0,-.075,-.13),L1=new THREE.Vector3(0,.07-HOME.y,-.05-HOME.z),L2=new THREE.Vector3(-.03,.09,.12).add(L1),
       LB=new THREE.Vector3(-.06,-.16,.1),L3=new THREE.Vector3(0,.05,.03).add(L1),_o=new THREE.Vector3();
   function ss(a,b,x){x=clamp((x-a)/(b-a),0,1);return x*x*(3-2*x);}
+  /* luz de las piezas del GLB (materiales wk_emit propios): color y emision a la vez, como los MeshBasic del procedural */
+  function glE(m,c,q){m.color.setRGB(c.r*q*.4,c.g*q*.4,c.b*q*.4);m.emissive.setRGB(c.r*q*1.25,c.g*q*1.25,c.b*q*1.25);}
   A.custom=function(w,f,dt,kick,A,g){
-    var c=cur.copy(w.pap?MG:CY),fb=Math.max(0,1-A.ft/.4),LA=A.LA.position,i,kr=1,lv=[0,0],show=true,off=_o.set(0,0,0);
+    var c=cur.copy(w.pap?MG:CY),fb=Math.max(0,1-A.ft/.4),LA=A.LA.position,i,kr=1,lv=[0,0],show=true,off=_o.set(0,0,0),G=A.gl;
     /* mano y celdas */
     if(f<0){LA.set(0,0,0);lv[0]=w.mag>0?1:0;lv[1]=w.mag>1?1:0;}
     else{
@@ -14891,16 +14997,48 @@ var DCY={on:false,t:0,rel:false,pool:[]};
     for(i=0;i<2;i++){
       A.cl[i]+=(lv[i]-A.cl[i])*Math.min(1,dt*(f>=0?20:7));
       var q=A.cl[i]*(.5+.12*Math.sin(A.t*6+i*2))+.04;A.cm[i].color.setRGB(c.r*q,c.g*q,c.b*q);
+      if(G)glE(G.cell[i],c,q);
     }
     /* anillos y nucleo laten (mas fuerte justo despues de disparar) */
     var pulse=.5+.5*Math.sin(A.t*4.4);
     for(i=0;i<4;i++){var p=(.3+.2*Math.sin(A.t*4.4-i*.9))*kr+fb*(1.2-i*.15);A.zr[i].color.setRGB(c.r*p,c.g*p,c.b*p);A.rings[i].scale.setScalar(.04*(1+.22*fb*(1-i*.15)));}
     var q2=(.55+.25*Math.sin(A.t*3))*kr+fb*.9;A.zc.color.setRGB(c.r*q2,c.g*q2,c.b*q2);A.rim.color.setRGB(c.r*(.35*kr+fb*.8),c.g*(.35*kr+fb*.8),c.b*(.35*kr+fb*.8));
+    if(G){
+      for(i=0;i<4;i++){glE(G.coil[i],c,(.3+.2*Math.sin(A.t*4.4-i*.9))*kr+fb*(1.2-i*.15));G.coilN[i].scale.setScalar(1+.22*fb*(1-i*.15));}
+      glE(G.vent,c,q2);glE(G.core,c,q2);glE(G.rim,c,.35*kr+fb*.8);
+      var cs=(.5+.5*kr)*(1+.1*Math.sin(A.t*7)+.9*fb);G.coreN.scale.set(cs,cs,1);
+    }
     A.core.scale.set(.018*(.5+.5*kr)*(1+.1*Math.sin(A.t*7)+.9*fb),.018*(.5+.5*kr)*(1+.1*Math.sin(A.t*7)+.9*fb),.012);
     A.halo.material.color.copy(c);A.halo.scale.setScalar(.12*(.6+.4*kr)*(1+.12*pulse+1.4*fb));A.halo.material.opacity=Math.min(1,.3+.35*kr*pulse+.8*fb);
     g.userData.flash.material.color.copy(c);
     /* retroceso fuerte */
     if(f<0&&A.ft<.9){var bk=Math.exp(-A.ft*8)*Math.min(1,A.ft*60);g.position.z+=.075*bk;g.position.y+=.012*bk;_wE.set(.17*bk,0,-.04*bk);_wq.setFromEuler(_wE);g.quaternion.multiply(_wq);}
+  };
+  /* MODELO GLB (models/vm_disruptor.glb, lo instala a_w_vmglb.js): sus piezas con vida se buscan por nombre y A.custom las anima igual que las procedurales.
+     - cell_0 / cell_1: pasan a A.CG (viajan con la mano al recargar, se ocultan al soltarlas); su nucleo wk_emit tiene material propio y sigue A.cm
+     - coil_0..3 (bobinas), dish_core (lente), dish_rim (aro del plato), vents (cintas de los flancos): materiales wk_emit propios, color cian / magenta con la Forja
+     Los materiales propios no cambian a la textura de la Forja (se tinen por codigo). Si falta un nodo lanza un error y queda el procedural. */
+  A.vmglb=function(N,api){
+    var need=['cell_0','cell_1','coil_0','coil_1','coil_2','coil_3','dish_core','dish_rim','vents'],i,moved=[],G={cell:[],coil:[],coilN:[],vent:null,core:null,rim:null,coreN:null};
+    for(i=0;i<need.length;i++)if(!N[need[i]])throw new Error('disruptor: falta el nodo '+need[i]);
+    function own(node,kit){   /* material propio (clon del que trae el nodo) para las mallas que lo usan; sin cambio a la textura de la Forja */
+      var out=[];
+      node.traverse(function(o){
+        if(!o.isMesh||!o.material)return;
+        var n=o.material.name;if(n!=='wk_emit'&&!(kit&&n==='wk_glass'))return;
+        var m=api.mat(o.material,n==='wk_glass');m.userData.pap=null;o.material=m;if(n==='wk_emit')out.push(m);
+      });
+      return out;
+    }
+    try{
+      A.CG.position.set(0,0,0);
+      for(i=0;i<2;i++){var cn=N['cell_'+i];A.CG.attach(cn);moved.push(cn);var cm=own(cn,true);if(!cm.length)throw new Error('disruptor: la celda '+i+' no tiene nucleo wk_emit');G.cell.push(cm[0]);}
+      for(i=0;i<4;i++){var cl=own(N['coil_'+i]);if(!cl.length)throw new Error('disruptor: coil_'+i+' sin wk_emit');G.coil.push(cl[0]);G.coilN.push(N['coil_'+i]);}
+      G.vent=(own(N.vents)||[])[0];G.core=(own(N.dish_core)||[])[0];G.rim=(own(N.dish_rim)||[])[0];G.coreN=N.dish_core;
+      if(!G.vent||!G.core||!G.rim)throw new Error('disruptor: faltan materiales wk_emit en vents / dish_core / dish_rim');
+    }catch(e){moved.forEach(function(o){if(o.parent)o.parent.remove(o);});A.gl=null;throw e;}
+    A.gl=G;
+    return {nodes:moved,undo:function(){A.gl=null;}};
   };
   wpkAddGun('disruptor',g);
 
@@ -15597,7 +15735,7 @@ WX.revolver={tp:function(g,M,pap){
    (sin modelo registrado, sin archivo o instalacion fallida). Nunca antes de resolver ese intento.
 ===================================================== */
 var VMGLB={pistol:'models/vm_m1911.glb',xbow:'models/vm_xbow.glb',revolver:'models/vm_revolver.glb',zapper:'models/vm_zapper.glb',eclipse:'models/vm_eclipse.glb',
-  rifle:'models/vm_rifle.glb',shotgun:'models/vm_shotgun.glb',smg:'models/vm_smg.glb',lmg:'models/vm_lmg.glb',sniper:'models/vm_sniper.glb'};   /* primera pasada de armas largas: candidata, no acabado final */
+  rifle:'models/vm_rifle.glb',shotgun:'models/vm_shotgun.glb',smg:'models/vm_smg.glb',lmg:'models/vm_lmg.glb',sniper:'models/vm_sniper.glb',nail:'models/vm_nail.glb',disruptor:'models/vm_disruptor.glb'};   /* primera pasada de armas largas: candidata, no acabado final */
 var VMG={on:false,ok:{},hands:{},env:null,fill:.25};
 var VM_HAND={'Graphite leather glove':.38,'Olive flight suit':.05,'Wrist cuff':.38,'Glove reinforcement leather':.38,'Waxed glove stitching':.38};   /* materiales de mano del GLB: cuanto suben hacia su tono de pantalla */
 (function(){

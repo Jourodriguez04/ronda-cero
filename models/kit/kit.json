@@ -1,0 +1,141 @@
+{
+ "wk_steel_blued": {
+  "c": "wk_steel_blued_c.jpg",
+  "n": "wk_steel_blued_n.jpg",
+  "orm": "wk_steel_blued_orm.jpg",
+  "rough": 0.384,
+  "metal": 0.891,
+  "tint": [
+   0.369,
+   0.402,
+   0.436
+  ]
+ },
+ "wk_steel_park": {
+  "c": "wk_steel_park_c.jpg",
+  "n": "wk_steel_park_n.jpg",
+  "orm": "wk_steel_park_orm.jpg",
+  "rough": 0.695,
+  "metal": 0.566,
+  "tint": [
+   0.796,
+   0.751,
+   0.821
+  ]
+ },
+ "wk_steel_bare": {
+  "c": "wk_steel_bare_c.jpg",
+  "n": "wk_steel_bare_n.jpg",
+  "orm": "wk_steel_bare_orm.jpg",
+  "rough": 0.267,
+  "metal": 0.968,
+  "tint": [
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "wk_polymer": {
+  "c": "wk_polymer_c.jpg",
+  "n": "wk_polymer_n.jpg",
+  "orm": "wk_polymer_orm.jpg",
+  "rough": 0.601,
+  "metal": 0.008,
+  "tint": [
+   0.896,
+   0.896,
+   0.919
+  ]
+ },
+ "wk_wood": {
+  "c": "wk_wood_c.jpg",
+  "n": "wk_wood_n.jpg",
+  "orm": "wk_wood_orm.jpg",
+  "rough": 0.478,
+  "metal": 0.008,
+  "tint": [
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "wk_bakelite": {
+  "c": "wk_bakelite_c.jpg",
+  "n": "wk_bakelite_n.jpg",
+  "orm": "wk_bakelite_orm.jpg",
+  "rough": 0.3,
+  "metal": 0.006,
+  "tint": [
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "wk_rubber": {
+  "c": "wk_rubber_c.jpg",
+  "n": "wk_rubber_n.jpg",
+  "orm": "wk_rubber_orm.jpg",
+  "rough": 0.892,
+  "metal": 0.01,
+  "tint": [
+   0.755,
+   0.755,
+   0.824
+  ]
+ },
+ "wk_paint_olive": {
+  "c": "wk_paint_olive_c.jpg",
+  "n": "wk_paint_olive_n.jpg",
+  "orm": "wk_paint_olive_orm.jpg",
+  "rough": 0.624,
+  "metal": 0.114,
+  "tint": [
+   1.0,
+   1.0,
+   1.0
+  ]
+ },
+ "wk_brass": {
+  "tint": [
+   0.69,
+   0.4,
+   0.07
+  ],
+  "rough": 0.32,
+  "metal": 1.0
+ },
+ "wk_glass": {
+  "tint": [
+   0.05,
+   0.1,
+   0.12
+  ],
+  "rough": 0.05,
+  "metal": 0.0,
+  "opacity": 0.35
+ },
+ "wk_shell_red": {
+  "tint": [
+   0.55,
+   0.045,
+   0.03
+  ],
+  "rough": 0.45,
+  "metal": 0.0
+ },
+ "wk_emit": {
+  "tint": [
+   0.55,
+   0.3,
+   0.06
+  ],
+  "rough": 0.4,
+  "metal": 0.0,
+  "emissive": [
+   1.0,
+   0.52,
+   0.1
+  ],
+  "emissiveIntensity": 0.8
+ }
+}

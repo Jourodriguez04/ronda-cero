@@ -1,0 +1,13 @@
+{
+ "version": 2,
+ "lmK": 2.0,
+ "lm": [
+  "rastro_lm0.jpg",
+  "rastro_lm0.jpg"
+ ],
+ "tris": 5378,
+ "obstacles": [],
+ "lamps": [],
+ "flick": [],
+ "glows": []
+}

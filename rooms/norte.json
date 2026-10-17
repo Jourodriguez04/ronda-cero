@@ -1,0 +1,13 @@
+{
+ "version": 2,
+ "lmK": 2.0,
+ "lm": [
+  "norte_lm0.jpg",
+  "norte_lm0.jpg"
+ ],
+ "tris": 16510,
+ "obstacles": [],
+ "lamps": [],
+ "flick": [],
+ "glows": []
+}

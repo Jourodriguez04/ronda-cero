@@ -1,11 +1,11 @@
 {
- "version": 1,
+ "version": 2,
  "lmK": 2.0,
  "lm": [
   "hangar_lm0.jpg",
   "hangar_lm1.jpg"
  ],
- "tris": 49614,
+ "tris": 24950,
  "obstacles": [
   {
    "x": -10.75,
@@ -270,5 +270,18 @@
    "off",
    0
   ]
- ]
+ ],
+ "lander": {
+  "node": "lander",
+  "core": [
+   -3.0,
+   0.785,
+   -3.0
+  ],
+  "drop": [
+   -3.0,
+   2.4,
+   -1.3
+  ]
+ }
 }

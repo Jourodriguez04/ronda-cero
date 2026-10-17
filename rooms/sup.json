@@ -1,0 +1,13 @@
+{
+ "version": 2,
+ "lmK": 2.0,
+ "lm": [
+  "sup_lm0.jpg",
+  "sup_lm0.jpg"
+ ],
+ "tris": 21300,
+ "obstacles": [],
+ "lamps": [],
+ "flick": [],
+ "glows": []
+}

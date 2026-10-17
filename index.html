@@ -4522,7 +4522,7 @@ function lampMat(c){return lampMats[c]||(lampMats[c]=new THREE.MeshBasicMaterial
 var ROOM3D={0:1,1:1},BTAG=null;
 /* salas nuevas con modelo de Blender (bl/scene_<sala>.py -> w/rooms/<sala>.glb): se marcan aqui al integrarlas.
    ?r3d=0 apaga todas; ?r3d=0,7 apaga solo esas (para comparar con la version procedural) */
-var ROOM3D_NEW=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+var ROOM3D_NEW=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
 /* ?r3dadd=2,3: prueba salas cuyo modelo existe pero aun no esta registrado (desarrollo) */
 try{(new URLSearchParams(location.search).get('r3dadd')||'').split(',').forEach(function(t){if(t!=='')ROOM3D_NEW.push(+t);});}catch(_){}
 ROOM3D_NEW.forEach(function(ri){ROOM3D[ri]=1;});
@@ -4585,7 +4585,7 @@ var mBarrel=new THREE.MeshPhongMaterial({color:0x6a2a1c,specular:0x553322,shinin
 ===================================================== */
 var ROOMS=[
   {n:'Hangar',rs:[[20,20,33,30],[19,24,19,25],[34,25,35,26]],s:'hangar',ceil:9.6},
-  {n:'Laboratorio',rs:[[3,19,16,27],[17,24,17,25],[7,28,8,28]],s:'lab'},
+  {n:'Laboratorio',rs:[[3,19,16,27],[17,24,17,25],[7,28,8,28]],s:'lab',ceil:6.6,low:[[17,24,17,25],[7,28,8,28]]},   /* v19: nave alta; el pasillo de descontaminacion y el vestibulo de bombas siguen a 3.6 */
   {n:'Dormitorios',rs:[[23,11,33,18],[34,14,34,15]],s:'dorm',fh:3.6,ceil:7.2},
   {n:'Generador',rs:[[38,22,49,30],[41,18,43,21],[37,25,37,26],[46,31,47,33]],s:'gen',ceil:8},
   {n:'Esclusa',rs:[[25,32,28,33],[26,34,27,34]],s:'lock'},
@@ -4594,13 +4594,13 @@ var ROOMS=[
      OJO: entre el anillo y el Puesto SIEMPRE queda una fila solida (z36, x58, z43). Dos casillas de piso contiguas al mismo nivel
      no llevan pared aunque sean de salas distintas: si se tocan, se entra al Puesto sin la Tarjeta. */
   {n:'Superficie',rs:[[14,35,60,35],[14,36,49,43],[14,44,60,44],[48,34,51,34],[56,34,60,34],[48,45,60,45],[59,36,60,43]],s:'moon',out:true,ceil:5.76},
-  {n:'Observatorio',rs:[[6,1,11,1],[5,2,12,2],[4,3,13,8],[5,9,12,9],[6,10,11,10]],s:'obs',ceil:6},
+  {n:'Observatorio',rs:[[6,0,11,1],[5,2,12,2],[4,3,13,8],[5,9,12,9],[6,10,11,10]],s:'obs',ceil:6},   /* v19: +fila z0 = nave de la Forja (x -42..-30, z -54..-52) */
   {n:'Túneles',rs:[[8,12,9,17],[10,14,21,15]],s:'tun',ceil:2.8,follow:true},
   {n:'Cámara de bombas',rs:[[4,30,11,36]],s:'tun',ceil:5},
   {n:'Enfermería',rs:[[37,9,46,16],[36,14,36,15]],s:'med',fh:3.6,ceil:6.9},
   {n:'Zona Norte',rs:[[48,1,59,17]],s:'moon',out:true,ceil:5.76},
   {n:'Camino del Rastro',rs:[[52,18,55,34]],s:'moon',out:true,ceil:5.76},
-  {n:'Puesto Ícaro',rs:[[51,37,54,42],[55,38,57,41]],s:'puesto',ceil:3.6},
+  {n:'Puesto Ícaro',rs:[[51,37,54,42],[55,38,57,41]],s:'puesto',ceil:5},   /* v19: 3.6 -> 5 (la guarida del Coloso se sentia aplastada) */
   /* EXCAVACION SELENE (detras de la boca de mina de la Zona Norte): galeria de entrada, caverna de la excavadora TOPO con el
      pozo de carga (pasarela elevada al norte) y, tras otra puerta, la Veta de Eclipsio. Adentro hay aire. */
   {n:'Galería de la mina',rs:[[61,4,66,5]],s:'tun',ceil:4.2},
@@ -4608,10 +4608,13 @@ var ROOMS=[
   {n:'Veta de Eclipsio',rs:[[82,7,87,11]],s:'tun',ceil:6},
   /* CAMARA CERO (secreta): detras del cristal mayor de la Veta, un tunel baja 6 m a la fosa donde la Reina tiene encadenado a
      El Primero. La puerta (key 'veta') no se compra: la abre el easter egg (s_cero.js). Piso -6, techo absoluto 10 (16 m de alto). */
-  {n:'Cámara Cero',rs:[[89,8,94,9],[95,0,106,15]],s:'tun',fh:-6,ceil:10}
+  {n:'Cámara Cero',rs:[[89,8,94,9],[95,0,106,15]],s:'tun',fh:-6,ceil:10},
+  /* REFUGIO DEL TURNO 3: socavon ciego al sur de la Excavacion donde se encerraron los mineros. Una sola salida y una grieta al
+     fondo por donde entran los zombis: es la trampa de la mina (la caja de municion del fondo es el cebo, s_mina.js). */
+  {n:'Refugio del Turno 3',rs:[[69,12,70,17]],s:'tun',ceil:3.6}
 ];
 /* salas exteriores que se tocan sin puerta: se activan y se ven juntas */
-var LINKS=[[4,5],[5,11],[11,10],[13,14]];
+var LINKS=[[4,5],[5,11],[11,10],[13,14],[14,17]];
 var DOOR_DEF=[
   {c:[18,24],w:2,cost:750,a:0,b:1,n:'Laboratorio'},
   {c:[27,19],w:2,cost:1000,a:0,b:2,n:'Dormitorios'},
@@ -4639,7 +4642,7 @@ var WIN_DEF=[
   [40,9,'n'],[45,9,'n'],
   [49,24,'e'],[49,29,'e'],[42,30,'s'],
   [5,9,'s'],[13,4,'e'],
-  [63,4,'n'],[67,1,'w'],[67,10,'w'],[72,0,'n'],[76,11,'s'],[87,10,'e']   // Excavacion: socavones laterales tapiados por los mineros
+  [63,4,'n'],[67,1,'w'],[67,10,'w'],[72,0,'n'],[76,11,'s'],[87,10,'e'],[69,17,'s']   // Excavacion: socavones laterales tapiados por los mineros
 ];
 /* rejillas del techo por donde caen zombis (camara de bombas y enfermeria; los tuneles son ruta y no llevan) */
 var VENT_DEF=[[6,32],[9,35],[39,12],[44,15],[42,10],[69,6],[78,2],[78,10],[85,9],[98,3],[98,12]];   /* +Camara Cero */   /* +Excavacion: grietas del techo de roca */
@@ -4650,7 +4653,8 @@ function P2W(px,py){return [px-54,py-54];}
 var PLACES={
   start:[P2W(54,58.5),P2W(52,58.5),P2W(56,58.5),P2W(54,60.5)],   // salida de hasta 4 jugadores
   power:P2W(80,46),            // palanca de energia (Generador)
-  powerWall:[40,22,'n'],forjaWall:[9,1,'n'],   // casilla + pared donde van la palanca y la Forja (wallPlace)
+  powerWall:[40,22,'n'],forjaWall:[9,0,'n'],   // casilla + pared donde van la palanca y la Forja (wallPlace)
+  forjaAt:[-36,-54],           // v19: Forja Lunar centrada en el eje puerta -> domo, espalda contra la pared de la nave (z -54)
   forja:P2W(18,13),            // Forja Lunar = mejora de armas (centro del Observatorio)
   perks:{ultimo:P2W(67,58),recarga:P2W(30,42),coraza:P2W(96,59),rafaga:P2W(77.5,23)},  // rafaga esta en el 2o piso (Enfermeria)
   box:[P2W(41.5,56),P2W(7.5,47.5),P2W(65,24),P2W(92,31.5),P2W(105,77)],  // caja misteriosa; la primera es la del inicio
@@ -4716,6 +4720,7 @@ var RAMPS=[
 var FH=new Float32Array(GW*GH),CE=new Float32Array(GW*GH),RD=new Uint8Array(GW*GH),RA=new Float32Array(GW*GH),RB=new Float32Array(GW*GH),STEP=.65;
 (function(){
   ROOMS.forEach(function(R){R.fh=R.fh||0;R.ceil=R.ceil||(R.fh+WH);R.cells.forEach(function(k){FH[k]=R.fh;CE[k]=R.ceil;});});
+  ROOMS.forEach(function(R){(R.low||[]).forEach(function(r){for(var z=r[1];z<=r[3];z++)for(var x=r[0];x<=r[2];x++)CE[idx(x,z)]=R.fh+WH;});});   /* tramos bajos dentro de una sala alta */
   MEZZ.forEach(function(m){for(var z=m[1];z<=m[3];z++)for(var x=m[0];x<=m[2];x++){var k=idx(x,z);if(CT[k]!==1)throw new Error('entrepiso fuera');FH[k]=m[4];}});
   RAMPS.forEach(function(r){var k=idx(r[0],r[1]);if(CT[k]!==1)throw new Error('escalera fuera '+r);RD[k]={n:1,s:2,e:3,w:4}[r[2]];RA[k]=r[3];RB[k]=r[4];FH[k]=Math.min(r[3],r[4]);});
   /* salas bajas que suben (tuneles): el techo sigue al piso */
@@ -4813,10 +4818,10 @@ function vquad2(m,sx,sz,ex,ez,ya0,ya1,yb0,yb1,u0,u1,base){
       if(w>=4&&h>=4){for(lz=r[1]+1.5;lz<=r[3]+1;lz+=4)zs.push(lz);for(lx=r[0]+1.5;lx<=r[2]+1;lx+=4)xs.push(lx);}
       else{var nx=Math.max(1,Math.round(w/4)),nz=Math.max(1,Math.round(h/4));for(i=0;i<nx;i++)xs.push(r[0]+(i+.5)*w/nx);for(i=0;i<nz;i++)zs.push(r[1]+(i+.5)*h/nz);}
       zs.forEach(function(lz){
-        var zc=cz2w(lz),xa=cx2w(r[0]),xb=cx2w(r[2]+1);
+        var zc=cz2w(lz),xa=cx2w(r[0]),xb=cx2w(r[2]+1);if(R.low)cy=CE[idx(r[0],r[1])];
         if(w>=3&&!R.follow)bbox(mMetal,(xa+xb)/2,cy-.22,zc,xb-xa,.4,.34);
         xs.forEach(function(lx){
-          var xc=cx2w(lx);if(R.follow)cy=CE[idx(Math.floor(lx),Math.floor(lz))];
+          var xc=cx2w(lx);if(R.follow||R.low)cy=CE[idx(Math.floor(lx),Math.floor(lz))];
           bbox(lampMat(sty.lamp),xc,cy-.05,zc,w>=2?1.5:.9,.08,.2);
           lamps.push({x:xc,y:cy-.5,z:zc,room:ri,col:new THREE.Color(sty.lamp),fl:scary||R.s==='gen'||Math.random()<.12,fk:1});
         });
@@ -8106,26 +8111,17 @@ var lever={};
   lever.ix=pl.x+pl.nx*1.1;lever.iz=pl.z+pl.nz*1.1;
 })();
 
-/* Forja Lunar: mejora el arma en la mano */
+/* Forja Lunar: mejora el arma en la mano. v19: aqui solo el objeto de juego (grupo, colision, punto de uso, halo y franja);
+   la maquina, sus animaciones y su sonido los pone w/s_forja.js (con modelo de reserva si no carga la sala 3D) */
 var PAP={state:'idle',t:0,w:null,cost:5000,rollers:[]};
 (function(){
-  var pl=wallPlace(PLACES.forjaWall[0],PLACES.forjaWall[1],PLACES.forjaWall[2],.6);
-  var g=new THREE.Group();g.position.set(pl.x,pl.y,pl.z);g.rotation.y=pl.ry;RG(roomAt(pl.x,pl.z)).add(g);
-  var dark=new THREE.MeshPhongMaterial({color:0x23252c,specular:0x5a6070,shininess:50});
-  var b=new THREE.Mesh(gBox,dark);b.scale.set(1.7,1.3,1.1);b.position.y=.65;g.add(b);
-  var b2=new THREE.Mesh(gBox,mMetal);b2.scale.set(1.5,.5,.9);b2.position.y=1.55;g.add(b2);
+  var fa=PLACES.forjaAt,pl=fa?{x:fa[0],z:fa[1],y:floorAt(fa[0],fa[1]+1),nx:0,nz:1,ry:0}:wallPlace(PLACES.forjaWall[0],PLACES.forjaWall[1],PLACES.forjaWall[2],.6);
+  var g=new THREE.Group();g.position.set(pl.x,pl.y,pl.z);g.rotation.y=pl.ry;RG(roomAt(pl.x+pl.nx,pl.z+pl.nz)).add(g);PAP.g=g;PAP.pl=pl;
   PAP.glowM=new THREE.MeshBasicMaterial({color:0x2a1638});
-  var strip=new THREE.Mesh(gBox,PAP.glowM);strip.scale.set(1.74,.08,1.13);strip.position.y=1.32;g.add(strip);
-  var mouth=new THREE.Mesh(gBox,PAP.glowM);mouth.scale.set(.95,.2,.05);mouth.position.set(0,1.0,.56);g.add(mouth);
-  for(var i=0;i<3;i++){var r=new THREE.Mesh(gCyl,mTank);r.scale.set(.13,1.45,.13);r.rotation.z=Math.PI/2;r.position.set(0,1.9,-.3+i*.3);g.add(r);PAP.rollers.push(r);}
-  var c=document.createElement('canvas');c.width=256;c.height=80;var x=c.getContext('2d');
-  x.fillStyle='#120a1c';x.fillRect(0,0,256,80);x.strokeStyle='#b04dff';x.lineWidth=4;x.strokeRect(3,3,250,74);
-  x.fillStyle='#e2c8ff';x.textAlign='center';var fpx=44;do{x.font='bold '+fpx+'px Teko, Impact, sans-serif';fpx-=2;}while(x.measureText('FORJA LUNAR').width>230&&fpx>16);x.fillText('FORJA LUNAR',128,54);
-  var sg=new THREE.Mesh(new THREE.PlaneGeometry(1.1,.34),new THREE.MeshPhongMaterial({map:new THREE.CanvasTexture(c),emissive:0x8040c0,emissiveIntensity:.4}));sg.position.set(0,.5,.56);g.add(sg);
   PAP.halo=noRay(new THREE.Sprite(new THREE.SpriteMaterial({map:radialTex('rgba(190,90,255,.9)','rgba(140,50,255,.25)'),blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})));
-  PAP.halo.scale.set(3.4,3.4,1);PAP.halo.position.set(0,1.5,.9);PAP.halo.visible=false;g.add(PAP.halo);
-  var sw=Math.abs(pl.nx)===1;addObs(sw?1.1:1.7,1.9,sw?1.7:1.1,pl.x,pl.z);
-  PAP.ix=pl.x+pl.nx*1.5;PAP.iz=pl.z+pl.nz*1.5;
+  PAP.halo.scale.set(3.4,3.4,1);PAP.halo.position.set(0,1.5,fa?2.3:.9);PAP.halo.visible=false;g.add(PAP.halo);
+  if(fa){addObs(3.2,2.4,2.0,pl.x,pl.z+1.0);PAP.ix=pl.x;PAP.iz=pl.z+2.9;}
+  else{var sw=Math.abs(pl.nx)===1;addObs(sw?1.1:1.7,1.9,sw?1.7:1.1,pl.x,pl.z);PAP.ix=pl.x+pl.nx*1.5;PAP.iz=pl.z+pl.nz*1.5;}
 })();
 function papWeapon(w){
   w.pap=true;w.name=PAPNAMES[w.type];w.dmg*=(w.type==='pistol'?3:2);
@@ -8367,7 +8363,7 @@ var mGrate=new THREE.MeshPhongMaterial({map:grateTex,color:0x8a949a,specular:0x1
 /* emisivos: con energia su color; sin energia rojo de emergencia (mE) o siempre encendidos (mE2) */
 var eWarm=C(mE,0xffe6b8),eCool=C(mE,0xcfeeff),eAmber=C(mE,0xffa422),eRedL=C(mE2,0xff3a22),eGreenL=C(mE,0x3dff7a),eCyan=C(mE,0x7fe8ff),
   eTank=em(0x4dff9a,0x1d7a44,{transparent:true,opacity:.62,depthWrite:false});
-var ACCH=[0xffb040,0x50ffc0,0xffa060,0xff7a30,0xff4a36,0xffffff,0x60a8ff,0xff3020,0xff3020,0x9affc8,0xe2e9ee,0xe2e9ee,0xb88aff,0xff5a2a,0xff5a2a,0xb04dff,0xb04dff];   /* +galeria, excavacion (rojo de emergencia), veta (violeta) */
+var ACCH=[0xffb040,0x50ffc0,0xffa060,0xff7a30,0xff4a36,0xffffff,0x60a8ff,0xff3020,0xff3020,0x9affc8,0xe2e9ee,0xe2e9ee,0xb88aff,0xff5a2a,0xff5a2a,0xb04dff,0xb04dff,0xff3020];   /* +galeria, excavacion (rojo de emergencia), veta (violeta) */
 var mAcc=ACCH.map(function(h){return C(mE,h);});
 function poolMat(hex){return C(mPool,hex);}
 var glowS=radialTex('rgba(255,255,255,.9)','rgba(255,255,255,.2)');
@@ -8400,10 +8396,10 @@ function drawEarth(x,cx,cy,r){
 function stars(x,X,Y,W,H,n){for(var i=0;i<n;i++){x.fillStyle='rgba(255,255,255,'+(.25+sr()*.75)+')';var s=sr()<.1?2:1;x.fillRect(X+sr()*W,Y+sr()*H,s,s);}}
 
 /* ---------- datos de las salas (13) ---------- */
-var RNAME=['HANGAR','LABORATORIO','DORMITORIOS','GENERADOR','ESCLUSA','SUPERFICIE','OBSERVATORIO','TÚNELES','CÁMARA DE BOMBAS','ENFERMERÍA','ZONA NORTE','CAMINO DEL RASTRO','PUESTO ÍCARO','GALERÍA','EXCAVACIÓN','VETA DE ECLIPSIO','CÁMARA CERO'];
-var RLET=['A','B','C','D','E','EXT','F','G','H','I','N','R','Í','M','M','V','0'];
-var RSUB=['SECTOR A  ·  VEHÍCULOS','SECTOR B  ·  BIOCIENCIA','SECTOR C  ·  NIVEL 2','SECTOR D  ·  ENERGÍA','SECTOR E  ·  DESCOMPRESIÓN','EXTERIOR  ·  SIN OXÍGENO','SECTOR F  ·  TELESCOPIO','SECTOR G  ·  MANTENIMIENTO','SECTOR H  ·  ACCESO RESTRINGIDO','SECTOR I  ·  CUARENTENA','EXTERIOR  ·  EXCAVACIÓN','EXTERIOR  ·  SIN OXÍGENO','AVANZADA 7-B  ·  RESTRINGIDO','MINA SELENE  ·  ENTRADA','MINA SELENE  ·  EXCAVADORA TOPO-3','PROHIBIDO EL PASO  ·  ZONA 0','???'];
-var RACC=['#f2b43a','#3fe0a8','#ff9a52','#ff6a2a','#ff4a3a','#e2e9ee','#5aa8ff','#ff3a2a','#ff3a2a','#7affb8','#e2e9ee','#e2e9ee','#b88aff','#ff5a2a','#ff5a2a','#c07aff','#c07aff'];
+var RNAME=['HANGAR','LABORATORIO','DORMITORIOS','GENERADOR','ESCLUSA','SUPERFICIE','OBSERVATORIO','TÚNELES','CÁMARA DE BOMBAS','ENFERMERÍA','ZONA NORTE','CAMINO DEL RASTRO','PUESTO ÍCARO','GALERÍA','EXCAVACIÓN','VETA DE ECLIPSIO','CÁMARA CERO','REFUGIO DEL TURNO 3'];
+var RLET=['A','B','C','D','E','EXT','F','G','H','I','N','R','Í','M','M','V','0','3'];
+var RSUB=['SECTOR A  ·  VEHÍCULOS','SECTOR B  ·  BIOCIENCIA','SECTOR C  ·  NIVEL 2','SECTOR D  ·  ENERGÍA','SECTOR E  ·  DESCOMPRESIÓN','EXTERIOR  ·  SIN OXÍGENO','SECTOR F  ·  TELESCOPIO','SECTOR G  ·  MANTENIMIENTO','SECTOR H  ·  ACCESO RESTRINGIDO','SECTOR I  ·  CUARENTENA','EXTERIOR  ·  EXCAVACIÓN','EXTERIOR  ·  SIN OXÍGENO','AVANZADA 7-B  ·  RESTRINGIDO','MINA SELENE  ·  ENTRADA','MINA SELENE  ·  EXCAVADORA TOPO-3','PROHIBIDO EL PASO  ·  ZONA 0','???','MINA SELENE  ·  SIN SALIDA'];
+var RACC=['#f2b43a','#3fe0a8','#ff9a52','#ff6a2a','#ff4a3a','#e2e9ee','#5aa8ff','#ff3a2a','#ff3a2a','#7affb8','#e2e9ee','#e2e9ee','#b88aff','#ff5a2a','#ff5a2a','#c07aff','#c07aff','#ff3a2a'];
 
 /* =====================================================
    ATLAS DE SENALES (14 letreros de 512x128)
@@ -8597,7 +8593,7 @@ EXC.push([MB.x,MB.z,1.2]);
  [-8,-27.5,1.7],[13.5,-30,2.3],[13.5,-18,2.4],                      /* Dormitorios */
  [22,-8.2,2.2],[37.9,-8.8,2.6],[36.2,7.1,2.6],[41,-9.4,1.2],[45,-9.4,1.2],[22,4,2.5],     /* Generador */
  [4,12,2.6],[-4,12,2.6],                                                        /* Esclusa */
- [-35,-52,1.9],[-39.5,-52,1.4],[-30.8,-52,1.4],[-46,-42,3.8],[-26,-37.3,1.5],[-40,-32,2.2],[-31,-32,2.2],   /* Observatorio */
+ [-36,-53,2.6],[-42,-53,1.4],[-30,-53,1.4],[-46,-42,3.8],[-26,-37.3,1.5],[-40,-32,2.2],[-31,-32,2.2],   /* Observatorio (v19: nave de la Forja) */
  [17,-26,3.3],[17,-22,3.3]                                                       /* pasarela */
 ].forEach(function(e){EXC.push(e);});
 function excluded(x,z,extra){for(var i=0;i<EXC.length;i++){var e=EXC[i];if(Math.hypot(x-e[0],z-e[1])<e[2]+(extra||0))return true;}return false;}
@@ -9488,16 +9484,16 @@ var DIRS_=['w','e','n','s'];
   /* paredes: acero azul-carbón mate; la nave queda sin muro claro y la Forja se enmarca aparte */
   wallClad(6,ph(0x13161b),ph(0x1f242c),1.1);
   lamps.forEach(function(L){if(L.room===6)L.col.multiplyScalar(.8);});
-  floorDecal(mDecal,-36.6,-37.2,.9,.9,0,decUV('arrow'),.014);floorDecal(mDecal,-35.6,-34.6,.9,.9,0,decUV('arrow'),.014);   /* flechas hacia la Forja desde la puerta */
+  floorDecal(mDecal,-36,-37.2,.9,.9,0,decUV('arrow'),.014);floorDecal(mDecal,-36,-34.6,.9,.9,0,decUV('arrow'),.014);   /* flechas hacia la Forja desde la puerta */
   bx(C(mE2,0x6a3cc0),-35.0,3.0,-32.07,1.2,.1,.03);bx(mSteelD,-35.0,3.0,-32.04,1.4,.2,.05);   /* símbolo (franja violeta) de la Forja junto a la puerta */
-  /* FORJA (recompensa): nicho oscuro en la pared norte con marco de acero, dintel con franja violeta y pastilla en el piso */
+  /* FORJA (recompensa): nicho oscuro en el fondo de la nave norte con marco de acero, dintel con franja violeta y pastilla en el piso */
   (function(){
-    var FX=-35,fF=WFp(FX,-52,'n',0);
+    var FX=-36,fF=WFp(FX,-54,'n',0);
     wbox(C(mE2,0x08090d),fF,0,1.85,.016,5.4,3.6,.02);
     [-2.8,2.8].forEach(function(a){wbox(mSteelD,fF,a,1.85,.12,.3,3.7,.24);wbox(mSteel,fF,a*.97,1.85,.25,.06,3.5,.04);});
     wbox(mSteelD,fF,0,3.7,.14,6.0,.34,.3);wbox(C(mE2,0x6a3cc0),fF,0,3.5,.3,5.2,.06,.04);
-    glowQuad(FX,3.2,-51.3,5.4,1.8,0,0x2a1450);
-    floorDecal(mDecal,FX,-49.2,3.4,3.4,0,decUV('ring'),.02);floorDecal(poolMat(0x4a2a8a),FX,-49.2,4.6,4.6,0,null,.024);
+    glowQuad(FX,3.2,-53.3,5.4,1.8,0,0x2a1450);
+    floorDecal(mDecal,FX,-51.2,3.4,3.4,0,decUV('ring'),.02);floorDecal(poolMat(0x4a2a8a),FX,-51.2,4.6,4.6,0,null,.024);
   })();
   /* telescopio sobre el pilar existente (-32,-46.8) */
   var SX=-32,SZ=-46.8,pitch=-Math.PI/3.2,yaw=.7;
@@ -9538,10 +9534,10 @@ var DIRS_=['w','e','n','s'];
   /* carta estelar en la pared este */
   var fE=WFp(-26,-37.3,'e',0);
   wbox(mTrimD,fE,0,1.75,.04,2.3,1.2,.06);wquad(mScreen,fE,0,1.75,.075,2.2,1.1,scUV('chart'));
-  /* bastidores de equipos a los lados de la Forja (pared norte) */
-  [-39.5,-30.8].forEach(function(x){
-    var f=WFp(x,-52,'n',0);wbox(mTrimD,f,0,1.1,.32,1.15,2.2,.62);wquad(mScreen,f,0,1.2,.635,1.0,1.8,scUV('rack'));
-    addObs(1.2,2.2,.65,x,-51.68);
+  /* bastidores de equipos en las paredes laterales de la nave de la Forja (v19) */
+  [[-42,'w'],[-30,'e']].forEach(function(q){
+    var f=WFp(q[0],-53,q[1],0);wbox(mTrimD,f,0,1.1,.32,1.15,2.2,.62);wquad(mScreen,f,0,1.2,.635,1.0,1.8,scUV('rack'));
+    addObs(.66,2.2,1.2,q[0]+(q[1]==='w'?.33:-.33),-53);
   });
   /* mesa de trabajo y casilleros en la pared sur, a los lados de la puerta */
   var fS=WFp(-40,-32,'s',0);
@@ -12255,7 +12251,7 @@ function netPlayers(){if(!NET.on)return 1;var n=1;for(var k in NET.av)if(NET.av[
 
 /* ---------- menu: entrar a sala, lista y empezar ---------- */
 /* version del juego: va en la presencia para avisar en la sala si alguien tiene una vieja en cache */
-var RC_VER=18;
+var RC_VER=19;
 (function(){try{var k=document.querySelector('#menu .kick');if(k)k.textContent=k.textContent+' · v'+RC_VER;}catch(_){}})();
 $('cjoin').addEventListener('click',function(){
   audioInit();
@@ -13360,7 +13356,7 @@ setInterval(function(){try{if(mode==='play'||IDEAS.panelOn)ideasRefresh();}catch
    HISTORIA Y EVENTOS (Agente L)
    - Diarios de Selene: 6 radios con luz que parpadea; E = escuchar (estatica + subtitulos que se escriben solos).
      Progreso del equipo (cooperativo: pedido 'l' cliente->anfitrion y mascara 'lr' dentro del estado del anfitrion).
-     Recompensa al completar los 6: "Frecuencia Selene" (perk gratis + holograma de la Tierra en el Observatorio).
+     Recompensa al completar los 9: "Frecuencia Selene" (perk gratis + holograma de la Tierra en el Observatorio).
    - Gravedad lunar afuera (loreJump / loreGrav / loreLedge, los llama s7.js).
    - Lluvia de meteoritos en la Superficie / Zona Norte / Camino del Rastro (evento 'M' del anfitrion).
    - Altavoces de la base entre rondas.
@@ -13411,7 +13407,28 @@ var LORE=[
     'Ibarra fue el precio. El Coloso es lo que el Eclipsio hace con nosotros cuando nos quedamos mucho tiempo cerca.',
     'Me llevo la última carga en la etapa de ascenso. Son órdenes. Allá abajo quieren el cristal… y quieren sus armas.',
     'Si oyes esto, ve al Observatorio. Sintoniza la catorce coma dos. Apunta a la Tierra.',
-    'Y reza para que lo que mandé no empiece a cantar allá también.']}
+    'Y reza para que lo que mandé no empiece a cantar allá también.']},
+  {who:'Sargento Elena Vidal · Seguridad, la noche de la fuga',lines:[
+    'Vidal, Seguridad. Para el registro: el Sujeto 00 rompió Aislamiento a las 03:10.',
+    'Andrés Valdivia, Turno 3. El primero que tocó la Veta. Lo subimos dormido en una camilla de carga. Ayer medía tres metros.',
+    'No rompió la puerta. Rompió la pared. Abrió la Enfermería hacia afuera y salió caminando al vacío como si nada.',
+    'Cruzó la Zona Norte derecho a la boca de la mina. No corría. Iba siguiendo algo… la canción.',
+    'Perdí a nueve en esta galería. Las balas no lo paran: solo lo enojan.',
+    'Calderón dice que la TOPO tiene seis mil voltios. La doctora Arce tiene un plan. Lo vamos a esperar abajo, frente a la Veta.']},
+  {who:'Nico Paz · operador de la TOPO-3',lines:[
+    'Paz, operador de la TOPO. Lo paramos. No sé por cuánto tiempo, pero lo paramos.',
+    'Vidal le clavó los arpones de sedación, doce, quince. Cayó de rodillas frente a la puerta de la Veta.',
+    'Yo pelé el cable de potencia de la TOPO y se lo metí por los arpones. Seis mil voltios. El olor no se me va a quitar nunca.',
+    'Mientras temblaba, la doctora Arce le enchufó sus máquinas en la espalda: el inhibidor.',
+    'Lo enganchamos al malacate de la TOPO y lo arrastramos por la Veta hasta la Cámara Cero. Lo amarramos con las cadenas de anclaje.',
+    'Cuando subimos, el cristal ya había crecido sobre la entrada. Solo. Como si alguien abajo cerrara la puerta.']},
+  {who:'Dra. Lucía Arce · Veta, última grabación',lines:[
+    'Arce. Esto es para quien venga después. El inhibidor no lo cura. Lo hace dormir.',
+    'Mis máquinas cantan encima de la canción: cada catorce segundos le responden a la Veta y él no la escucha.',
+    'Pero ahora sé por qué fue hacia abajo. En la Cámara Cero hay algo vivo dentro del cristal. Los mineros le dicen la Reina.',
+    'Ella lo llamaba. Y él obedecía. Lo encadenamos justo a sus pies.',
+    'El cristal mayor de la Veta es su oído. Si alguien lo rompe en el pulso, mis máquinas se callan y él despierta… y será de ella otra vez.',
+    'Si tienes que bajar: rompe los nodos de mi inhibidor en su espalda. Sin ellos no puede sostenerlo. Entonces ella tendrá que mostrarse.']}
 ];
 /* Anclas de decorado estable en metros de mundo. dir mira hacia el soporte; el frente mira al jugador.
    wall delimita la cara esperada: nunca buscar la primera cosa que haya delante (puertas/sillas).
@@ -13422,7 +13439,10 @@ var LORE_SPOTS=[
   {room:3,x:28,z:2,wall:[26.55,2],dir:[-1,0]},                /* Generador: columna */
   {room:6,x:-39.6,z:-34.5,surf:[-39.6,-32.5,1],dir:[0,1]},    /* Observatorio: mesa de trabajo de la pared sur */
   {room:9,x:36,z:-35,wall:[40,-35],dir:[1,0]},                /* Enfermeria, Aislamiento: pared este, piso superior */
-  {room:12,x:50,z:23.4,wall:[48,23.4],stand:1.4,dir:[-1,0]}   /* Icaro: pared oeste SOLIDA, fuera del marco/caja lateral */
+  {room:12,x:50,z:23.4,wall:[48,23.4],stand:1.4,dir:[-1,0]},  /* Icaro: pared oeste SOLIDA, fuera del marco/caja lateral */
+  {room:13,x:70.2,z:-42.4,wall:[70.2,-42],dir:[0,1]},         /* Galeria: pared sur, junto a la esclusa (la fuga) */
+  {room:14,x:81.0,z:-34.2,wall:[80,-34.2],dir:[-1,0]},        /* Excavacion: pared oeste, mirando a la contencion (como lo pararon) */
+  {room:15,x:118,z:-30.6,wall:[118,-30],dir:[0,1]}            /* Veta: pared sur (el inhibidor y la Reina) */
 ];
 var LORE_GATE=[14.4,4.5];          /* golpes del porton: afuera de la pared este del Hangar */
 var LORE_N=LORE.length,LORE_ALL=(1<<LORE_N)-1;
@@ -14580,7 +14600,8 @@ var ROOM3D_DEF=[{ri:0,base:'rooms/hangar',label:'Hangar',now:1},{ri:1,base:'room
   /* exteriores: shell = el modelo solo reemplaza el casco (piso/muros); el decorado de s_decor se queda */
   {ri:5,base:'rooms/sup',label:'Superficie',shell:1},{ri:10,base:'rooms/norte',label:'Zona Norte',shell:1},{ri:11,base:'rooms/rastro',label:'Camino del Rastro',shell:1},
   /* Excavacion Selene (mina) */
-  {ri:13,base:'rooms/galeria',label:'Galería de la mina'},{ri:14,base:'rooms/excav',label:'Excavación'},{ri:15,base:'rooms/veta',label:'Veta de Eclipsio'},{ri:16,base:'rooms/cero',label:'Cámara Cero'}];
+  {ri:13,base:'rooms/galeria',label:'Galería de la mina'},{ri:14,base:'rooms/excav',label:'Excavación'},{ri:15,base:'rooms/veta',label:'Veta de Eclipsio'},{ri:16,base:'rooms/cero',label:'Cámara Cero'},
+  {ri:17,base:'rooms/refugio',label:'Refugio del Turno 3'}];
 /* ?r3d=0 apaga todas las salas con modelo; ?r3d=0,7 apaga solo esas */
 (function(){
   if(typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;
@@ -15201,6 +15222,27 @@ function minaAmbTick(dt){
 }
 var _minaAmbUL=updateLamps;
 updateLamps=function(dt){_minaAmbUL(dt);minaAmbTick(dt);};
+
+/* ---------- Refugio del Turno 3 (sala 17): la caja de municion del fondo es el cebo de la trampa ----------
+   Una vez por ronda y por jugador (cada quien recarga sus armas: no hace falta el anfitrion). Esta al fondo del callejon,
+   pegada a la grieta por donde entran los zombis. */
+var REFUGIO={x:87.35,z:-19.6,cost:3500,round:-1};
+(function(){
+  var it={x:REFUGIO.x-1.0,z:REFUGIO.z,r:1.7,
+    can:function(){return mode==='play'&&!P.down&&!P.dead;},
+    cost:function(){return REFUGIO.round===round?0:REFUGIO.cost;},
+    label:function(){return REFUGIO.round===round?'Caja vacía · vuelve la próxima ronda':'Munición del Turno 3';},
+    act:function(){
+      if(REFUGIO.round===round){if(typeof sfxDeny==='function')sfxDeny();return;}
+      if(P.pts<REFUGIO.cost){if(typeof sfxDeny==='function')sfxDeny();toast('Puntos insuficientes');return;}
+      P.pts-=REFUGIO.cost;REFUGIO.round=round;
+      for(var i=0;i<2;i++)if(slots[i]){var d=WDEF[slots[i].type];slots[i].reserve=d.reserve*(slots[i].pap?2:1);slots[i].mag=slots[i].magMax;}
+      if(typeof wpkRefill==='function')wpkRefill();
+      hud();if(typeof sfxPower==='function')sfxPower();toast('Munición al tope');
+    }};
+  inter.push(it);REFUGIO.it=it;
+})();
+var _refFR=fearReset;fearReset=function(){_refFR();REFUGIO.round=-1;};
 /* =====================================================
    EASTER EGG "EL PRIMERO" Y PELEA FINAL (Camara Cero, sala 16)
    Pasos (los cuenta el anfitrion; en cooperativo viajan en g.ee y las acciones de los clientes con la peticion 'e'):
@@ -15235,15 +15277,15 @@ var EE_DOCS=[
     'Crecimiento óseo: dieciocho centímetros en una noche. Cristal en hombros y antebrazos.',
     'No responde a su nombre. Responde a la Veta.',
     'Cuando el cristal late, Ibarra mira hacia abajo. Siempre hacia abajo.',
-    'Lo bajamos a la Cámara Cero, con lo otro. Fue un error.',
-    'Lo otro lo estaba esperando.']},
+    'Quisimos bajarlo a la Cámara Cero, junto al Sujeto 00. En la Veta se soltó de la camilla.',
+    'Desde entonces ronda la base. Cada pocas noches vuelve a subir, más grande.']},
   {who:'Expediente 03 · Clasificado: El Primero',lines:[
-    'Bajo la Veta hay una cámara. Lo que vive ahí estaba dentro del cristal antes de que llegáramos.',
-    'Los mineros le dicen la Reina. No se mueve. No le hace falta: mueve a los demás.',
-    'Usó al primer minero que bajó, hace cuarenta años. Lo hizo enorme. Le decimos El Primero.',
-    'La entrada es el cristal mayor de la Veta. Solo se abre cuando canta.',
-    'Prueba de campo: un disparo de energía Eclipse en su corazón, en el instante del pulso. Tres veces.',
-    'Si alguien lee esto: no lo abran. Y si lo abren, no bajen solos.']}
+    'Sujeto 00: Andrés Valdivia, Turno 3. El primero que tocó la Veta. Le decimos El Primero.',
+    'Crecimiento sin techo. Fuerza imposible de medir. Rompió Aislamiento y bajó a la mina siguiendo la canción.',
+    'Contenido en la Excavación: sedación, descarga de la TOPO e inhibidor Arce. Encadenado en la Cámara Cero.',
+    'En la Cámara Cero hay algo vivo dentro del cristal. Los mineros le dicen la Reina. Ella lo llamaba.',
+    'La entrada es el cristal mayor de la Veta. Solo se abre cuando canta: energía Eclipse en su corazón, en el instante del pulso. Tres veces.',
+    'Si alguien lee esto: no lo abran. Si lo abren, la Reina lo vuelve a tener.']}
 ];
 var EE_END={who:'Transmisión entrante · Control Ícaro, Tierra',lines:[
   'Aquí Control Ícaro, Tierra. ¿Selene? ¿Alguien nos copia?',
@@ -15692,6 +15734,262 @@ var KIT={on:true,px:512,tex:{},
   if(window.ASSETS&&typeof ASSETS.track==='function'){try{ASSETS.track(Promise.all(all),'Materiales');}catch(_){}}
 })();
 /* =====================================================
+   FORJA LUNAR (v19): la maquina viva de la nave norte del Observatorio
+   El objeto de juego (PAP: estado, colision, punto de uso, cobro, mejora) sigue en s9.js; aqui va lo que se ve y se oye:
+   - casco de reserva (zocalo, cuerpo, bobinas, jaula, aro): SOLO si la sala 3D no cargo (lleva userData.r3d=6 y la sala
+     horneada lo retira al instalarse; el casco bueno esta horneado en bl/scene_obs.py con estas mismas medidas)
+   - lo que se mueve o brilla: cristal de Eclipsio que flota y gira, dos anillos orbitales, arcos electricos entre las
+     bobinas y el cristal, engranajes laterales (PAP.rollers: s9 los acelera al forjar), ranura y franjas violeta, pantalla
+     con lectura viva, letrero en el proscenio, columna de energia y vapor al forjar
+   - zumbido de la maquina con energia (sintetizado; sube al forjar) y chasquidos de los arcos
+   Coordenadas locales del grupo PAP.g: origen al pie de la pared de fondo (x -36, z -54), +z hacia la sala.
+   ~11 llamadas de dibujo con energia (antes 9 con la caja); sin luces nuevas: la luz violeta esta horneada.
+===================================================== */
+var FORJA={t:0,arcT:0,arcOn:0,scrT:0,puffs:[],beamK:0,flash:0,last:'',hum:null};
+(function(){
+  if(!PAP||!PAP.g||typeof THREE==='undefined')return;
+  var g=PAP.g,TAG=typeof ROOM3D!=='undefined'&&ROOM3D[6];
+  var MZ=.85,FZ=1.6,CY=2.62;                       /* centro del cuerpo, cara frontal, altura del cristal */
+  /* union de geometrias (sin BufferGeometryUtils): [[geo, matriz], ...] -> una sola malla */
+  function fMerge(list){
+    var pos=[],nor=[],idx=[],off=0,v=new THREE.Vector3(),nm=new THREE.Matrix3();
+    list.forEach(function(it){
+      var ge=it[0].index?it[0]:it[0],m=it[1]||new THREE.Matrix4(),p=ge.attributes.position,n=ge.attributes.normal,i;
+      nm.getNormalMatrix(m);
+      for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).applyMatrix4(m);pos.push(v.x,v.y,v.z);v.fromBufferAttribute(n,i).applyMatrix3(nm).normalize();nor.push(v.x,v.y,v.z);}
+      if(ge.index){for(i=0;i<ge.index.count;i++)idx.push(ge.index.getX(i)+off);}else{for(i=0;i<p.count;i++)idx.push(i+off);}
+      off+=p.count;ge.dispose();
+    });
+    var o=new THREE.BufferGeometry();o.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));o.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));o.setIndex(idx);o.computeBoundingSphere();return o;
+  }
+  function M(x,y,z,rx,ry,rz,sx,sy,sz){var m=new THREE.Matrix4(),q=new THREE.Quaternion().setFromEuler(new THREE.Euler(rx||0,ry||0,rz||0));return m.compose(new THREE.Vector3(x,y,z),q,new THREE.Vector3(sx||1,sy||1,sz||1));}
+  function mesh(geo,mat,x,y,z){var o=noRay(new THREE.Mesh(geo,mat));if(x!==undefined)o.position.set(x,y,z);g.add(o);return o;}
+
+  /* ---------- casco de reserva (sin sala 3D) ---------- */
+  (function(){
+    var dk=[],st=[],B=function(w,h,d){return new THREE.BoxGeometry(w,h,d);},Cy=function(r,h,s,r1){return new THREE.CylinderGeometry(r1===undefined?r:r1,r,h,s||12);};
+    dk.push([B(3.4,.35,2),M(0,.175,1)],[B(2.4,1.5,1.5),M(0,1.11,MZ)]);
+    st.push([B(2.52,.09,1.62),M(0,1.9,MZ)],[B(1.5,.1,.08),M(0,1.47,FZ+.04)],[B(1.5,.1,.08),M(0,.93,FZ+.04)],[B(.1,.64,.08),M(-.7,1.2,FZ+.04)],[B(.1,.64,.08),M(.7,1.2,FZ+.04)]);
+    [-1,1].forEach(function(s){
+      dk.push([B(.56,.4,.56),M(s*1.5,.55,.6)],[Cy(.17,1.95,8),M(s*1.5,1.72,.6)]);
+      for(var k=0;k<8;k++)st.push([Cy(.25,.05,10),M(s*1.5,.92+k*.23,.6)]);
+      st.push([Cy(.3,.35,12,.12),M(s*1.5,2.88,.6)],[Cy(.56,.04,16),M(s*1.22,1.15,MZ,0,0,Math.PI/2)]);
+    });
+    st.push([Cy(.62,.1,16),M(0,1.99,MZ)],[Cy(.66,.15,16),M(0,3.42,MZ)],[Cy(.4,.22,12,.24),M(0,3.61,MZ)]);
+    for(var k=0;k<4;k++){var a=Math.PI/4+k*Math.PI/2;st.push([B(.07,1.3,.07),M(Math.cos(a)*.55,2.7,MZ+Math.sin(a)*.55)]);}
+    st.push([new THREE.TorusGeometry(2.35,.2,6,32),M(0,3.25,.2)]);
+    dk.push([new THREE.CircleGeometry(2.2,24),M(0,3.25,.03)]);
+    var mD=new THREE.MeshPhongMaterial({color:0x2a2e38,specular:0x3a4050,shininess:30}),mS=new THREE.MeshPhongMaterial({color:0x6a7080,specular:0x8890a0,shininess:50});
+    [mesh(fMerge(dk),mD),mesh(fMerge(st),mS)].forEach(function(o){if(TAG)o.userData.r3d=6;});
+  })();
+
+  /* ---------- franjas violeta (una malla): ranura, aro del reactor, bandas de las bobinas, arco del piso ---------- */
+  FORJA.mV=new THREE.MeshBasicMaterial({color:0x2a1638});
+  (function(){
+    var L=[],r;
+    L.push([new THREE.RingGeometry(2.12,2.22,48),M(0,3.25,.395)]);                                      /* surco del aro */
+    for(var k=0;k<8;k++){var a=2*Math.PI*k/8;L.push([new THREE.PlaneGeometry(.06,.3),M(Math.cos(a)*1.92,3.25+Math.sin(a)*1.92,.05,0,0,a+Math.PI/2)]);}   /* rayos del aro */
+    [-1,1].forEach(function(s){for(var k=0;k<3;k++)L.push([new THREE.CylinderGeometry(.19,.19,.04,10,1,true),M(s*1.5,1.15+k*.46,.6)]);});
+    L.push([new THREE.RingGeometry(3.42,3.5,40,1,0,Math.PI),M(0,.022,0,Math.PI/2,0,0)]);               /* arco del piso (semicirculo hacia la sala) */
+    L.push([new THREE.PlaneGeometry(2.3,.04),M(0,1.86,FZ+.03)]);                                         /* filo bajo la tapa */
+    [-1,1].forEach(function(s){
+      L.push([new THREE.PlaneGeometry(.05,4.2),M(s*5.86,2.45,.25,0,-s*Math.PI/2,0)]);                     /* tiras verticales en las esquinas de la nave */
+      L.push([new THREE.PlaneGeometry(.05,4.2),M(s*5.86,2.45,3.75,0,-s*Math.PI/2,0)]);
+    });
+    L.push([new THREE.PlaneGeometry(11.4,.05),M(0,4.86,4.27)]);                                          /* filo bajo el proscenio */
+    var o=mesh(fMerge(L),FORJA.mV);o.material.side=THREE.DoubleSide;FORJA.strips=o;
+  })();
+  /* ranura de la boca: la franja de s9 (PAP.glowM) con degradado (nucleo claro, bordes oscuros y lineas de barrido) */
+  (function(){
+    var c=document.createElement('canvas');c.width=64;c.height=32;var x=c.getContext('2d'),gr=x.createLinearGradient(0,0,0,32);
+    gr.addColorStop(0,'#0c0614');gr.addColorStop(.35,'#6a3a90');gr.addColorStop(.5,'#ffffff');gr.addColorStop(.65,'#6a3a90');gr.addColorStop(1,'#0c0614');
+    x.fillStyle=gr;x.fillRect(0,0,64,32);x.fillStyle='rgba(0,0,0,.35)';for(var i=0;i<64;i+=6)x.fillRect(i,0,2,32);
+    var tx=new THREE.CanvasTexture(c);tx.wrapS=THREE.RepeatWrapping;PAP.glowM.map=tx;PAP.glowM.needsUpdate=true;
+    FORJA.slot=mesh(new THREE.PlaneGeometry(1.26,.4),PAP.glowM,0,1.2,FZ+.012);
+  })();
+
+  /* ---------- cristal de Eclipsio (flota y gira dentro de la jaula) ---------- */
+  FORJA.mC=new THREE.MeshPhongMaterial({color:0x3a1460,emissive:0x8a3cff,emissiveIntensity:.2,specular:0xffffff,shininess:90,flatShading:true,transparent:true,opacity:.94});
+  (function(){
+    var L=[[new THREE.OctahedronGeometry(.3,0),M(0,0,0,0,0,0,1,2.05,1)]];
+    [[.2,-.28,.06,.5],[-.18,-.32,-.08,-.6],[.04,-.38,-.2,.2]].forEach(function(s){L.push([new THREE.OctahedronGeometry(.09,0),M(s[0],s[1],s[2],s[3],s[3],0,1,2.2,1)]);});
+    FORJA.cr=mesh(fMerge(L),FORJA.mC,0,CY,MZ);
+  })();
+  /* anillos orbitales */
+  FORJA.mR=new THREE.MeshBasicMaterial({color:0x6a3cc0,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false});
+  FORJA.r1=mesh(new THREE.TorusGeometry(.46,.016,5,40),FORJA.mR,0,CY,MZ);FORJA.r1.rotation.x=1.2;
+  FORJA.r2=mesh(new THREE.TorusGeometry(.56,.012,5,44),FORJA.mR,0,CY,MZ);FORJA.r2.rotation.set(.3,0,.9);
+  /* resplandor del cristal y halo de s9 (reubicado delante del cristal) */
+  FORJA.glow=noRay(new THREE.Sprite(new THREE.SpriteMaterial({map:radialTex('rgba(210,150,255,.95)','rgba(150,70,255,.3)'),blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:0})));
+  FORJA.glow.position.set(0,CY,MZ+.3);FORJA.glow.scale.set(1.6,1.6,1);g.add(FORJA.glow);
+  PAP.halo.position.set(0,1.6,FZ+.6);PAP.halo.scale.set(2.6,2.6,1);
+
+  /* ---------- engranajes laterales (una malla: los dos giran sobre el mismo eje x) ---------- */
+  (function(){
+    var L=[];
+    [-1,1].forEach(function(s){
+      L.push([new THREE.CylinderGeometry(.4,.4,.06,16),M(s*1.29,0,0,0,0,Math.PI/2)]);
+      L.push([new THREE.CylinderGeometry(.12,.12,.12,10),M(s*1.32,0,0,0,0,Math.PI/2)]);
+      for(var k=0;k<12;k++){var a=2*Math.PI*k/12;L.push([new THREE.BoxGeometry(.06,.1,.1),M(s*1.29,Math.cos(a)*.44,Math.sin(a)*.44,a,0,0)]);}
+      for(k=0;k<4;k++){var b=Math.PI/4+k*Math.PI/2;L.push([new THREE.BoxGeometry(.07,.05,.5),M(s*1.3,Math.cos(b)*.2,Math.sin(b)*.2,b,0,0)]);}
+    });
+    var o=mesh(fMerge(L),new THREE.MeshPhongMaterial({color:0x50545e,specular:0x8a90a0,shininess:50}),0,1.15,MZ);
+    PAP.rollers.push(o);FORJA.gear=o;
+  })();
+
+  /* ---------- pantalla (lectura viva) ---------- */
+  FORJA.cv=document.createElement('canvas');FORJA.cv.width=256;FORJA.cv.height=40;FORJA.cx=FORJA.cv.getContext('2d');
+  FORJA.tex=new THREE.CanvasTexture(FORJA.cv);
+  FORJA.scr=mesh(new THREE.PlaneGeometry(1.6,.25),new THREE.MeshBasicMaterial({map:FORJA.tex}),0,1.7,FZ+.045);
+  /* ---------- letrero del proscenio ---------- */
+  (function(){
+    var c=document.createElement('canvas');c.width=512;c.height=96;var x=c.getContext('2d');
+    x.fillStyle='#0b0612';x.fillRect(0,0,512,96);x.strokeStyle='#b04dff';x.lineWidth=5;x.strokeRect(5,5,502,86);
+    x.fillStyle='#ecdcff';x.textAlign='center';var fp=78;do{x.font='bold '+fp+'px Teko, Impact, sans-serif';fp-=2;}while(x.measureText('FORJA LUNAR').width>440&&fp>20);
+    x.shadowColor='#a040ff';x.shadowBlur=14;x.fillText('FORJA LUNAR',256,74);
+    FORJA.mSign=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),color:0x404040});
+    mesh(new THREE.PlaneGeometry(3.0,.46),FORJA.mSign,0,5.32,4.262);
+  })();
+
+  /* ---------- arcos electricos (cintas cruzadas, una malla dinamica) ---------- */
+  var NA=4,NS=9,NV=NA*NS*2*4;
+  FORJA.arcPos=new Float32Array(NV*3);
+  var ai=[];for(var q=0;q<NA*NS*2;q++){var b0=q*4;ai.push(b0,b0+1,b0+2,b0,b0+2,b0+3);}
+  var ag=new THREE.BufferGeometry();ag.setAttribute('position',new THREE.BufferAttribute(FORJA.arcPos,3));ag.setIndex(ai);
+  ag.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,3,1),4);
+  FORJA.mA=new THREE.MeshBasicMaterial({color:0xe2c4ff,transparent:true,opacity:1,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  FORJA.arcs=mesh(ag,FORJA.mA);FORJA.arcs.frustumCulled=false;FORJA.arcs.visible=false;
+  /* ---------- columna de energia al forjar ---------- */
+  var bg=new THREE.CylinderGeometry(.16,.3,3.3,10,1,true);bg.translate(0,CY+1.65,MZ);
+  FORJA.mB=new THREE.MeshBasicMaterial({color:0x9a50ff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  FORJA.beam=mesh(bg,FORJA.mB);FORJA.beam.visible=false;
+  /* ---------- pulsos de energia que bajan por los conductos del techo hasta la jaula (una nube de puntos) ---------- */
+  FORJA.paths=[-.22,0,.22].map(function(dx){return [[dx*2.5,5.65,3.6],[dx*1.5,5.7,1.4],[dx*1.5,5.7,.25],[dx*1.5,4.9,.25],[dx,4.3,.5],[dx,3.7,MZ]].map(function(p){return new THREE.Vector3(p[0],p[1],p[2]);});});
+  FORJA.paths.forEach(function(P){var L=0;P.len=[0];for(var i=1;i<P.length;i++){L+=P[i].distanceTo(P[i-1]);P.len.push(L);}P.L=L;});
+  FORJA.ppos=new Float32Array(9*3);var pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(FORJA.ppos,3));
+  pg.boundingSphere=new THREE.Sphere(new THREE.Vector3(0,5,2),4);
+  FORJA.mP=new THREE.PointsMaterial({size:.32,map:radialTex('rgba(235,200,255,1)','rgba(160,80,255,.45)'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0});
+  FORJA.pts=noRay(new THREE.Points(pg,FORJA.mP));FORJA.pts.frustumCulled=false;g.add(FORJA.pts);
+  /* ---------- vapor (4 bocanadas reutilizables, solo al forjar) ---------- */
+  var smt=radialTex('rgba(200,195,215,.55)','rgba(150,145,170,.18)');
+  for(var p=0;p<4;p++){var sp=noRay(new THREE.Sprite(new THREE.SpriteMaterial({map:smt,transparent:true,depthWrite:false,opacity:0})));sp.visible=false;g.add(sp);FORJA.puffs.push({s:sp,t:9,vx:0,vy:0,x:0,y:0,z:0});}
+})();
+
+/* rayo quebrado de a a b dentro de la cinta k (dos cintas cruzadas, ancho w) */
+var _fa=new THREE.Vector3(),_fb=new THREE.Vector3(),_fp=new THREE.Vector3(),_fq=new THREE.Vector3();
+function forjaBolt(k,ax,ay,az,bx,by,bz,amp,w){
+  var P=FORJA.arcPos,NS=9,i,pts=[];
+  for(i=0;i<=NS;i++){var t=i/NS,e=Math.sin(Math.PI*t)*amp;pts.push([ax+(bx-ax)*t+(Math.random()-.5)*e,ay+(by-ay)*t+(Math.random()-.5)*e,az+(bz-az)*t+(Math.random()-.5)*e]);}
+  for(var r=0;r<2;r++){
+    var ox=r?0:w,oz=r?w:0,oy=r?w*.5:0;
+    for(i=0;i<NS;i++){
+      var o=((k*NS+i)*2+r)*12,a=pts[i],b=pts[i+1];
+      P[o]=a[0]-ox;P[o+1]=a[1]-oy;P[o+2]=a[2]-oz;P[o+3]=a[0]+ox;P[o+4]=a[1]+oy;P[o+5]=a[2]+oz;
+      P[o+6]=b[0]+ox;P[o+7]=b[1]+oy;P[o+8]=b[2]+oz;P[o+9]=b[0]-ox;P[o+10]=b[1]-oy;P[o+11]=b[2]-oz;
+    }
+  }
+}
+function forjaArcs(n,work){
+  var P=FORJA.arcPos;P.fill(0);
+  var CY=2.62,MZ=.85;
+  for(var k=0;k<n;k++){
+    var s=(k%2)?1:-1;
+    if(k<2)forjaBolt(k,s*1.5,3.08,.6,(Math.random()-.5)*.2,CY+(Math.random()-.5)*.4,MZ+(Math.random()-.5)*.2,.35,.018);
+    else{var a=Math.random()*Math.PI*2;forjaBolt(k,(Math.random()-.5)*.3,CY+.3,MZ,Math.cos(a)*2.2,3.25+Math.sin(a)*2.2,.4,.6,.014);}
+  }
+  FORJA.arcs.geometry.attributes.position.needsUpdate=true;
+}
+function forjaScreen(on,work,pct){
+  var x=FORJA.cx,W=256,H=40,t=FORJA.t;
+  x.fillStyle=on?'#0a0612':'#050307';x.fillRect(0,0,W,H);
+  x.font='bold 26px Teko, Impact, sans-serif';x.textBaseline='middle';x.textAlign='left';
+  if(!on){x.fillStyle=(Math.sin(t*3)>0)?'#7a2020':'#3a1010';x.fillText('SIN ENERGÍA · ACTIVA EL GENERADOR',8,22);}
+  else if(work){
+    x.fillStyle='#e6ccff';x.fillText('FORJANDO',8,22);
+    for(var i=0;i<10;i++){x.fillStyle=i<pct*10?'#b04dff':'#2a1840';x.fillRect(104+i*11,10,8,20);}
+    x.fillStyle='#e6ccff';x.textAlign='right';x.fillText(Math.round(pct*100)+'%',W-6,22);
+  }else{
+    x.fillStyle='#c9a8ff';x.fillText('ECLIPSIO '+(96+Math.round(Math.sin(t*.7)*3))+'%',8,22);
+    x.strokeStyle='#8a4ae0';x.lineWidth=2;x.beginPath();
+    for(var j=0;j<100;j++){var px=140+j,py=20+Math.sin(j*.25+t*6)*7*Math.sin(j*.05+t);if(j)x.lineTo(px,py);else x.moveTo(px,py);}x.stroke();
+  }
+  FORJA.tex.needsUpdate=true;
+}
+/* zumbido de la maquina: sierra grave + armonicos por un pasabajos con tremolo; volumen por distancia */
+function forjaHum(d,on,work){
+  if(typeof AC==='undefined'||!AC||!master)return;
+  if(!FORJA.hum){
+    try{
+      var h=FORJA.hum={},g=AC.createGain(),lp=AC.createBiquadFilter();g.gain.value=0;lp.type='lowpass';lp.frequency.value=380;lp.Q.value=5;lp.connect(g);g.connect(master);
+      [[55,'sawtooth',.5],[110.4,'sine',.4],[164.8,'triangle',.14],[220.9,'sine',.06]].forEach(function(o){var s=AC.createOscillator(),gg=AC.createGain();s.type=o[1];s.frequency.value=o[0];gg.gain.value=o[2];s.connect(gg);gg.connect(lp);s.start();});
+      var l=AC.createOscillator(),lg=AC.createGain();l.frequency.value=2.7;lg.gain.value=140;l.connect(lg);lg.connect(lp.frequency);l.start();
+      h.g=g;h.lp=lp;
+    }catch(e){FORJA.hum={g:null};return;}
+  }
+  if(!FORJA.hum.g)return;
+  var k=on&&mode==='play'&&!paused?Math.max(0,1-d/18):0,v=k*k*(work?.16:.05),n=AC.currentTime;
+  FORJA.hum.g.gain.setTargetAtTime(v,n,.3);FORJA.hum.lp.frequency.setTargetAtTime(work?900:380,n,.4);
+}
+function forjaZap(d,v){if(typeof AC==='undefined'||!AC||typeof gate!=='function'||!gate(1)||d>16)return;var t=AC.currentTime,k=(1-d/16)*v;nz(t,.04+Math.random()*.06,2600,7000,.22*k,'highpass',{});tn(t,'square',90+Math.random()*60,40,.06,.05*k,{lp:1800});}
+function forjaTick(dt){
+  if(!PAP||!PAP.g||!FORJA.cr)return;
+  var gr=PAP.g,vis=gr.parent&&gr.parent.visible!==false,d=Math.hypot(P.x-gr.position.x,P.z-(gr.position.z+1.5));
+  var on=!!power,work=PAP.state==='work';
+  forjaHum(vis?d:99,on,work);
+  if(!vis||d>45)return;
+  FORJA.t+=dt;var t=FORJA.t,pct=work?Math.min(1,PAP.t/3.3):0;
+  /* cristal y anillos */
+  var spin=work?6+pct*10:(on?.6:.12);
+  FORJA.cr.rotation.y+=dt*spin;FORJA.cr.position.y=2.62+Math.sin(t*(on?1.6:.5))*(on?.06:.02)+(work?Math.sin(t*23)*.015:0);
+  FORJA.mC.emissiveIntensity=on?(work?1.6+Math.sin(t*20)*.5:.75+Math.sin(t*2.1)*.22):.12+Math.sin(t*.9)*.04;
+  FORJA.r1.rotation.y+=dt*(work?7:on?.9:0);FORJA.r1.rotation.z+=dt*(work?3:on?.35:0);
+  FORJA.r2.rotation.x+=dt*(work?-5:on?-.6:0);FORJA.r2.rotation.y+=dt*(work?4:on?.4:0);
+  var rs=work?1+pct*.25+Math.sin(t*30)*.04:1;FORJA.r1.scale.setScalar(rs);FORJA.r2.scale.setScalar(rs*1.02);
+  FORJA.mR.opacity=on?(work?1:.55+Math.sin(t*1.7)*.15):.12;
+  FORJA.glow.material.opacity=on?(work?.95:.45+Math.sin(t*2.1)*.12):.06;FORJA.glow.scale.setScalar(on?(work?2.2+Math.sin(t*26)*.3:1.5):1.1);
+  /* franjas violeta: respiran con energia, laten al forjar */
+  var kv=on?(work?.85+.15*Math.sin(t*24):.62+.16*Math.sin(t*1.3)):.1;
+  FORJA.mV.color.setRGB(.69*kv,.30*kv,1.0*kv);
+  FORJA.mSign.color.setScalar(on?.85+.1*Math.sin(t*1.1)+(Math.random()<.004?-.5:0):.18);
+  if(!work&&on&&PAP.halo.visible)PAP.halo.scale.setScalar(2.6+Math.sin(t*1.5)*.15);
+  if(PAP.glowM.map)PAP.glowM.map.offset.x=(t*(work?1.6:.15))%1;
+  /* engranajes: giro lento con energia (al forjar los acelera s9) */
+  if(!work&&on)FORJA.gear.rotation.x+=dt*.5;
+  /* arcos */
+  FORJA.arcT-=dt;
+  if(on&&(work||FORJA.arcOn>0||FORJA.arcT<=0)){
+    if(FORJA.arcT<=0&&!work){FORJA.arcOn=.1+Math.random()*.1;FORJA.arcT=1.4+Math.random()*2.8;forjaZap(d,.6);}
+    FORJA.arcOn-=dt;FORJA.arcs.visible=true;FORJA.arcs.userData.rt=(FORJA.arcs.userData.rt||0)-dt;
+    if(FORJA.arcs.userData.rt<=0){FORJA.arcs.userData.rt=.045;forjaArcs(work?4:2,work);if(work&&Math.random()<.25)forjaZap(d,.5);}
+    FORJA.mA.opacity=.6+Math.random()*.4;
+    if(!work&&FORJA.arcOn<=0)FORJA.arcs.visible=false;
+  }else FORJA.arcs.visible=false;
+  /* columna de energia */
+  FORJA.beamK+=((work?1:0)-FORJA.beamK)*Math.min(1,dt*(work?5:2.5));
+  FORJA.beam.visible=FORJA.beamK>.02;if(FORJA.beam.visible){FORJA.mB.opacity=FORJA.beamK*(.35+.25*Math.sin(t*35));FORJA.beam.scale.set(1+Math.sin(t*17)*.08,1,1+Math.sin(t*17)*.08);}
+  /* vapor: al terminar la forja suelta dos bocanadas por los costados y un soplo arriba */
+  if(work&&PAP.t>2.75&&FORJA.last!=='puff'){FORJA.last='puff';[[-1.35,1.6,.9,-1.2],[1.35,1.6,.9,1.2],[0,3.8,.85,0],[-.5,.5,1.7,-.4]].forEach(function(q,i){var f=FORJA.puffs[i];f.t=0;f.x=q[0];f.y=q[1];f.z=q[2];f.vx=q[3];f.vy=.9;});}
+  if(!work)FORJA.last='';
+  FORJA.puffs.forEach(function(f){
+    if(f.t>2.2){f.s.visible=false;return;}
+    f.t+=dt;f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.96;f.s.visible=true;f.s.position.set(f.x,f.y,f.z);
+    var k=f.t/2.2;f.s.scale.setScalar(.5+k*2.2);f.s.material.opacity=.55*(1-k)*Math.min(1,f.t*6);
+  });
+  /* pulsos por los conductos (3 por conducto; mas rapidos al forjar) */
+  FORJA.mP.opacity=on?(work?1:.7):0;FORJA.pts.visible=on;
+  if(on){
+    var sp2=work?4.5:1.1;
+    for(var c=0;c<3;c++){var Pp=FORJA.paths[c];for(var j=0;j<3;j++){
+      var u=((t*sp2/Pp.L+j/3+c*.17)%1)*Pp.L,i2=1;while(i2<Pp.length-1&&Pp.len[i2]<u)i2++;
+      var a=Pp[i2-1],b=Pp[i2],f=(u-Pp.len[i2-1])/((Pp.len[i2]-Pp.len[i2-1])||1),o=(c*3+j)*3;
+      FORJA.ppos[o]=a.x+(b.x-a.x)*f;FORJA.ppos[o+1]=a.y+(b.y-a.y)*f;FORJA.ppos[o+2]=a.z+(b.z-a.z)*f;}}
+    FORJA.pts.geometry.attributes.position.needsUpdate=true;
+  }
+  /* pantalla: ~7 cuadros por segundo */
+  FORJA.scrT-=dt;if(FORJA.scrT<=0){FORJA.scrT=.14;forjaScreen(on,work,pct);}
+}
+(function(){var _sp=stepPap;stepPap=function(dt){_sp(dt);try{forjaTick(dt);}catch(e){if(!FORJA.err){FORJA.err=1;try{console.warn('forja:',e&&e.message);}catch(_){}}}};})();
+/* =====================================================
    COMO ENTRAN LOS ZOMBIS (estilo BO2)
    - Ventanas: el zombi sale de la oscuridad DETRAS del hueco, mete los brazos y arranca las tablas desde afuera
      (si estas pegado a la ventana te araña a traves de ella), y cuando no quedan tablas se trepa por el marco y cae adentro.
@@ -15881,6 +16179,79 @@ killZombie=function(z,head){
   }
   return _zaKZ(z,head);
 };
+/* =====================================================
+   ESTACIONES DE DOSIS: las 4 maquinas de perks modeladas (models/bebidas.glb, bl/bebidas.py)
+   beb_T Coraza Titán (bóveda a presión) · beb_R Recarga Cometa (columna-cohete) · beb_D Ráfaga Doble (tanques gemelos)
+   beb_A Último Aliento (reanimación). Cada raiz cae en el grupo de su perk (p.halo.parent) y reemplaza la caja procedural.
+   Materiales: beb_body (atlas), beb_glow (mismo atlas como emisivo: apagado sin energía), beb_glass.
+   Pieza viva por maquina: aguja del manómetro / burbujas / fuelle. Al comprar: destello del letrero.
+   Si el archivo no carga (node, sin red) queda la maquina procedural de s9.js y no pasa nada.
+===================================================== */
+var BEB={req:false,ok:false,m:[],t:0};
+function bebLoad(){
+  if(BEB.req||typeof THREE==='undefined'||!THREE.GLTFLoader||typeof XMLHttpRequest==='undefined'||typeof window==='undefined')return;BEB.req=true;
+  try{new THREE.GLTFLoader().load('models/bebidas.glb',function(gl){try{bebInstall(gl);}catch(e){console.warn('bebidas',e);}},null,function(){});}catch(_){}
+}
+function bebInstall(gl){
+  var K=['T','R','D','A'],seen=[],an=1;try{an=Math.min(4,renderer.capabilities.getMaxAnisotropy());}catch(_){}
+  function fixT(t){if(t&&seen.indexOf(t)<0){seen.push(t);t.encoding=THREE.LinearEncoding;t.anisotropy=an;t.needsUpdate=true;}}
+  PERKS.forEach(function(p,i){
+    var root=gl.scene.getObjectByName('beb_'+K[i]),g=p.halo&&p.halo.parent;if(!root||!g)return;
+    var e={p:p,i:i,root:root,glow:null,anim:null,own:!!perkOwn[i],fl:0,blink:0,bt:3+Math.random()*9};
+    root.traverse(function(o){
+      if(!o.isMesh)return;
+      o.raycast=function(){};
+      var m=o.material,nm=(m.name||'').replace(/\.\d+$/,'');
+      fixT(m.map);fixT(m.emissiveMap);m.envMap=null;
+      if(nm==='beb_glow'){if(!e.glow){e.glow=m.clone();e.glow.userData.c0=e.glow.color.clone();}o.material=e.glow;}
+      else if(nm==='beb_glass'){m.transparent=true;m.depthWrite=false;m.opacity=.2;m.roughness=.08;m.metalness=.1;o.renderOrder=3;}
+      else if(nm==='beb_body'&&!m.userData.beb){m.userData.beb=1;m.color.setScalar(.6);m.emissive.setRGB(1,1,1);m.emissiveMap=m.map;m.emissiveIntensity=.04;m.needsUpdate=true;}   /* el atlas viene claro: bajo el color; leve relleno para que no quede negro sin energia */
+    });
+    root.traverse(function(o){var mm=/^beb_._(aguja|burbujas|fuelle)$/.exec(o.name);if(mm){e.anim=o;e.kind=mm[1];e.q0=o.quaternion.clone();e.y0=o.position.y;}});
+    /* fuera la caja procedural (el halo se queda: lo maneja applyPowerLook) */
+    g.children.slice().forEach(function(c){if(c!==p.halo)g.remove(c);});
+    root.position.set(0,0,0);g.add(root);
+    root.traverse(function(o){if(o!==e.anim&&o!==root){o.matrixAutoUpdate=false;o.updateMatrix();}});
+    p.halo.position.set(0,1.45,0);p.halo.scale.set(3.2,3.2,1);p.halo.material.opacity=.8;   /* el aura queda detras: tine la pared alrededor sin lavar el frente */
+    BEB.m.push(e);
+  });
+  BEB.ok=BEB.m.length>0;bebLook(power);
+}
+function bebLook(on){
+  BEB.m.forEach(function(e){if(!e.glow)return;e.glow.emissiveIntensity=on?1:.02;e.glow.color.copy(e.glow.userData.c0).multiplyScalar(on?.3:.4);   /* encendida: manda el emisivo (si no, la linterna la quema en blanco) */});
+}
+var _bebZ=new THREE.Vector3(0,0,1),_bebQ=new THREE.Quaternion();
+function bebTick(dt){
+  if(!BEB.ok)return;BEB.t+=dt;var t=BEB.t;
+  for(var k=0;k<BEB.m.length;k++){
+    var e=BEB.m[k],own=!!perkOwn[e.i];
+    if(own&&!e.own)e.fl=1;   /* la compro alguien (o salio gratis): destello */
+    e.own=own;
+    var g=e.p.halo.parent;if(!g||Math.abs(g.position.x-P.x)+Math.abs(g.position.z-P.z)>18)continue;
+    var on=power;
+    if(e.glow&&on){
+      e.bt-=dt;if(e.bt<=0){e.blink=.12+Math.random()*.25;e.bt=6+Math.random()*12;}   /* parpadeo suelto de base abandonada */
+      var b=1;if(e.blink>0){e.blink-=dt;b=Math.random()<.5?.25:.8;}
+      e.glow.emissiveIntensity=b*(.92+.08*Math.sin(t*2.3+e.i))+e.fl*2.2;
+      e.p.halo.scale.setScalar(3.2*(1+e.fl*.5));
+    }
+    if(e.fl>0){e.fl=Math.max(0,e.fl-dt*1.6);if(e.fl===0&&e.glow)bebLook(power);}
+    var a=e.anim;if(!a)continue;
+    if(e.kind==='aguja'){
+      var ang=on?-1.3+Math.sin(t*5.3)*.05+Math.sin(t*13.1)*.025-e.fl*.6:2.36;
+      _bebQ.setFromAxisAngle(_bebZ,ang);a.quaternion.copy(e.q0).multiply(_bebQ);
+    }else if(e.kind==='burbujas'){
+      var P_=e.i===1?.22:.2;a.position.y=e.y0+(on?((t*(.16+e.fl*.6))%P_):0);a.visible=on;
+    }else if(e.kind==='fuelle'){
+      a.scale.y=on?.66+.34*(.5+.5*Math.sin(t*(1.7+e.fl*4))):.5;
+    }
+  }
+}
+(function(){
+  var _apl=applyPowerLook;applyPowerLook=function(on){_apl(on);bebLook(on);};
+  var _sp=stepPap;stepPap=function(dt){_sp(dt);bebTick(dt);};
+  bebLoad();
+})();
 /* =====================================================
    PAQUETE DE ARMAS — nucleo comun (del integrador; los modulos a_w_*.js cuelgan de aqui)
    WX[tipo]   = manejadores por arma o equipo: {use(), fire(w,mp,ray,wd,hits), tp(g,M,pap), give()}

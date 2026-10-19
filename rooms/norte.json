@@ -5,9 +5,19 @@
   "norte_lm0.jpg",
   "norte_lm0.jpg"
  ],
- "tris": 19482,
+ "tris": 22886,
  "obstacles": [],
  "lamps": [],
  "flick": [],
- "glows": []
+ "glows": [
+  [
+   41.9,
+   4.9,
+   -32.0,
+   16722452,
+   7.5,
+   "off",
+   0
+  ]
+ ]
 }

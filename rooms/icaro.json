@@ -5,8 +5,18 @@
   "icaro_lm0.jpg",
   "icaro_lm1.jpg"
  ],
- "tris": 14070,
- "obstacles": [],
+ "tris": 15354,
+ "obstacles": [
+  {
+   "x": 54.7,
+   "z": 20.32,
+   "hw": 0.8,
+   "hd": 0.27,
+   "h": 1.8,
+   "y0": 0.0,
+   "b3": 1
+  }
+ ],
  "lamps": [
   [
    50.6,

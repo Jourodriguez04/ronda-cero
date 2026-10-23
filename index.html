@@ -24818,9 +24818,11 @@ function saTine(sr){
   [[1,.5,.28],[2.76,.3,.3],[5.4,.22,.12],[8.93,.1,.07]].forEach(function(p){sndMode(d,sr,.001,1046.5*p[0]*(1+.003*sndR()),p[1],p[2]);});
   return sndNorm(sndFade(d,sr,.08),.9);
 }
-/* lanzamiento de la granada: el brazo corta el aire (sube y se cierra) y la tela roza */
+/* lanzamiento de la granada: el brazo corta el aire (sube y se cierra) y la tela roza.
+   v22: la envolvente se recorta a >=0: sin(3.141593) da -3.5e-7 y pow(negativo,1.6) = NaN en el ultimo 13 % del sonido;
+   esas muestras NaN envenenaban el compresor maestro y el juego quedaba mudo tras el primer lanzamiento */
 function saGThrow(sr){
-  var d=sndA(.5,sr),t,i;t=sndA(.45,sr);for(i=0;i<t.length;i++){var x=i/t.length,e=Math.pow(Math.sin(3.141593*Math.min(1,x*1.15)),1.6);t[i]=sndR()*e;}
+  var d=sndA(.5,sr),t,i;t=sndA(.45,sr);for(i=0;i<t.length;i++){var x=i/t.length,e=Math.pow(Math.max(0,Math.sin(Math.PI*Math.min(1,x*1.15))),1.6);t[i]=sndR()*e;}
   sndBq(t,sr,'b',450,1.1,1900);sndNorm(t,1);sndMix(d,t,.8,0,sr);
   t=sndA(.3,sr);sndNb(t,sr,.02,1,.06,.05);sndBq(t,sr,'b',1500,.7,600);sndNorm(t,1);sndMix(d,t,.25,0,sr);
   return sndNorm(sndFade(d,sr,.08),.9);

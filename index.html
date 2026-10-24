@@ -14140,7 +14140,7 @@ function netPlayers(){if(!NET.on)return 1;var n=1;for(var k in NET.av)if(NET.av[
 
 /* ---------- menu: entrar a sala, lista y empezar ---------- */
 /* version del juego: va en la presencia para avisar en la sala si alguien tiene una vieja en cache */
-var RC_VER=22;
+var RC_VER=23;
 (function(){try{var k=document.querySelector('#menu .kick');if(k)k.textContent=k.textContent+' · v'+RC_VER;}catch(_){}})();
 $('cjoin').addEventListener('click',function(){
   audioInit();
@@ -27158,6 +27158,208 @@ if(typeof animZombie==='function'){var _za2AZ=animZombie;
     return r;
   };}
 /* =====================================================
+   ZOMBIS CON CAPTURA DE MOVIMIENTO (v23 zmocap)
+   - Biblioteca compartida models/zombies/zanim_lib.glb (bl/zombies/mocap.py: clips de la CMU Graphics Lab Motion
+     Capture Database pasados al esqueleto de 24 huesos): solo esqueleto + acciones, sirve a todos los modelos.
+   - Cada zombi tiene su THREE.AnimationMixer sobre los 24 grupos del rig (z.zr): los grupos siguen mandando (cajas de
+     impacto, fisica, desmembramiento y el GLB de s_zglb.js los copian igual que antes). Los clips solo giran huesos y
+     mueven la cadera: valen para cualquier modelo con el contrato de 24 huesos.
+   - Andar sorteado con el id de red y la velocidad (que el cliente recibe redondeada): todos los clientes ven el mismo,
+     cero datos nuevos en la red. El ritmo del clip sigue a la velocidad real (timeScale = v / velocidad del clip).
+   - Corre (z.sp >= 1.8) con trote o con el tambaleo rapido segun z.runStyle; ataca, recibe golpes, muere de espaldas,
+     de cara o de rodillas segun z.dv (el cadaver de s_fisica.js sigue igual), se arrastra sin piernas, sale de la
+     tierra (el final del hoyo) y trepa la ventana con el clip al paso de z.vp. Arrancar tablas, caer del ducto y
+     aterrizar siguen con la pose procedural (r_anim.js), mezclada con transicion.
+   - Encima: la cabeza mira al jugador mas cercano (za2Target) y los pasos del audio salen de las pisadas del clip (z.ph).
+   - LOD: lejos o fuera de pantalla el mezclador corre a 30/15/10 Hz con el dt acumulado y entre medio se repone la
+     ultima pose (copia). Sin la biblioteca (o ZMC.on=false) todo vuelve a la animacion procedural de siempre.
+===================================================== */
+var ZMC={on:true,lib:false,clips:{},meta:null,err:null,fail:null,near:16,far:40,prof:false,
+  st:{n:0,mx:0,skip:0,ms:0},WALK:[],RUN:[],ATK:[],HIT:[],
+  B:['hip','up','sp2','sp3','nk','hg','cL','aL_s','aL_e','aL_w','cR','aR_s','aR_e','aR_w','lL_h','lL_k','lL_a','lL_f','lR_h','lR_k','lR_a','lR_f']};
+try{if(typeof location!=='undefined'&&new URLSearchParams(location.search).get('zmocap')==='0')ZMC.on=false;}catch(e){}   /* ?zmocap=0: la procedural (comparar) */
+var _zmcQ=new THREE.Quaternion(),_zmcQ2=new THREE.Quaternion(),_zmcE=new THREE.Euler(0,0,0,'YXZ');
+
+/* ---------- biblioteca ---------- */
+function zmcSetLib(gl){
+  var meta=null;gl.scene.traverse(function(o){if(o.userData&&o.userData.zanimLib)meta=o.userData.zanimLib;});
+  if(!meta||!meta.clips)throw new Error('zanim_lib sin metadatos');
+  var clips={},bad=[];
+  (gl.animations||[]).forEach(function(c){clips[c.name]=c;
+    c.tracks.forEach(function(t){var n=t.name.split('.')[0];if(ZMC.B.indexOf(n)<0)bad.push(t.name);});});
+  for(var k in meta.clips)if(!clips[k])bad.push('falta '+k);
+  if(bad.length)throw new Error('zanim_lib: '+bad.slice(0,4).join(', '));
+  ZMC.clips=clips;ZMC.meta=meta;
+  var by=function(u){return Object.keys(meta.clips).filter(function(k){return meta.clips[k].use===u;});};
+  ZMC.WALK=by('walk');ZMC.RUN=by('run');ZMC.ATK=by('attack');ZMC.HIT=by('hit');
+  ZMC.lib=ZMC.WALK.length>0&&!!clips.idle;
+  return ZMC.lib;
+}
+function zmcLoad(){
+  if(typeof XMLHttpRequest==='undefined'||!THREE.GLTFLoader)return null;
+  return new Promise(function(res){
+    try{new THREE.GLTFLoader().load('models/zombies/zanim_lib.glb',function(gl){
+      try{zmcSetLib(gl);}catch(e){ZMC.fail=String(e&&e.message||e);}res();
+    },null,function(){ZMC.fail='zanim_lib no disponible';res();});}catch(e){ZMC.fail=String(e&&e.message||e);res();}
+  });
+}
+
+/* ---------- por zombi ---------- */
+function zmcRand(id){var s=(Math.imul((id|0)+7,2246822519)^0x27d4eb2f)>>>0;return function(){s=(s+0x6D2B79F5)>>>0;var t=s;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296;};}
+/* andar: entre los clips cuya velocidad natural (x .7 .. x 1.9) cubre la del zombi (redondeada como la recibe el cliente) */
+function zmcPickWalk(z,R){
+  var sp=Math.round((z.sp||1)*10)/10,W=ZMC.WALK,C=ZMC.meta.clips,ok=W.filter(function(n){var v=C[n].speed;return sp>=v*.7&&sp<=v*1.9;});
+  if(!ok.length)ok=W.slice().sort(function(a,b){return Math.abs(C[a].speed-sp)-Math.abs(C[b].speed-sp);}).slice(0,2);
+  return ok[Math.floor(R()*ok.length)%ok.length];
+}
+function zmcInit(z){
+  if(!ZMC.lib||!z||z.dog||z.boss||!z.zr)return null;
+  if(!z.za2&&typeof za2Init==='function')za2Init(z);   /* rasgos por id (z.runStyle, z.tilt...) antes de elegir clips */
+  var id=z.nid!=null?z.nid:((Math.random()*1e6)|0),R=zmcRand(id),bones=z.zr;
+  var root={uuid:THREE.MathUtils.generateUUID(),name:'zmc',skeleton:{getBoneByName:function(n){return bones[n];}},children:[]};
+  var M=z.zmc={id:id,R:R,root:root,mx:new THREE.AnimationMixer(root),cur:null,curN:'',w:0,mode:'',v:0,px:z.g.position.x,pz:z.g.position.z,
+    walk:zmcPickWalk(z,R),run:ZMC.RUN.length?ZMC.RUN[(z.runStyle?1:0)%ZMC.RUN.length]:null,ps:z.stun||0,pa:z.atkA||0,ph:z.ph||0,
+    acc:0,has:false,pose:new Float32Array(ZMC.B.length*4+3),buf:new Float32Array(ZMC.B.length*4+3),t0:R(),yl:0,pl:0,dead:false,end:0,sp:Math.round((z.sp||1)*10)};
+  if(ZMC.RUN.indexOf('run_lurch')>=0&&ZMC.RUN.indexOf('run_jog')>=0)M.run=z.runStyle?'run_lurch':'run_jog';
+  var free=function(){try{M.mx.stopAllAction();M.mx.uncacheRoot(root);}catch(e){}z.g.removeEventListener('removed',free);};
+  z.g.addEventListener('removed',free);
+  return M;
+}
+function zmcAct(M,name){var c=ZMC.clips[name];if(!c)return null;return M.mx.clipAction(c);}
+/* cambia de clip con transicion: once = una vez (queda en el ultimo cuadro), t = desde donde */
+function zmcPlay(M,name,fade,once,t,ts){
+  var a=zmcAct(M,name);if(!a)return null;
+  if(M.cur===a&&!once){if(ts!=null)a.timeScale=ts;return a;}
+  if(M.cur===a){a.stop();}
+  a.reset();a.setLoop(once?THREE.LoopOnce:THREE.LoopRepeat,Infinity);a.clampWhenFinished=!!once;
+  a.time=t||0;a.timeScale=ts!=null?ts:1;a.setEffectiveWeight(1);a.play();
+  if(M.cur&&M.cur!==a&&fade>0){M.cur.crossFadeTo(a,fade,false);}
+  else if(M.cur&&M.cur!==a)M.cur.stop();
+  M.cur=a;M.curN=name;return a;
+}
+function zmcDur(n){var m=ZMC.meta.clips[n];return m?m.dur:1;}
+function zmcSpeed(n){var m=ZMC.meta.clips[n];return m&&m.speed>.05?m.speed:1;}
+
+/* pose: guardar / reponer (LOD) y mezclar con la procedural (transiciones) */
+function zmcGrab(z,arr){var B=ZMC.B,zr=z.zr;for(var i=0;i<B.length;i++){var q=zr[B[i]].quaternion;arr[i*4]=q._x;arr[i*4+1]=q._y;arr[i*4+2]=q._z;arr[i*4+3]=q._w;}
+  var h=z.hip.position,o=B.length*4;arr[o]=h.x;arr[o+1]=h.y;arr[o+2]=h.z;}
+function zmcPut(z,arr){var B=ZMC.B,zr=z.zr;for(var i=0;i<B.length;i++){zr[B[i]].quaternion.set(arr[i*4],arr[i*4+1],arr[i*4+2],arr[i*4+3]);}
+  var o=B.length*4;z.hip.position.set(arr[o],arr[o+1],arr[o+2]);}
+function zmcMix(z,arr,w){   /* grupos (mocap) = slerp(procedural guardada, mocap, w) */
+  var B=ZMC.B,zr=z.zr;for(var i=0;i<B.length;i++){var q=zr[B[i]].quaternion;_zmcQ.set(arr[i*4],arr[i*4+1],arr[i*4+2],arr[i*4+3]);_zmcQ.slerp(q,w);q.copy(_zmcQ);}
+  var o=B.length*4,h=z.hip.position;h.set(arr[o]+(h.x-arr[o])*w,arr[o+1]+(h.y-arr[o+1])*w,arr[o+2]+(h.z-arr[o+2])*w);}
+
+/* pisadas del clip -> z.ph (el audio pone un paso cada vez que z.ph cruza un multiplo de pi) */
+function zmcPhase(M,a,name){
+  var m=ZMC.meta.clips[name],st=m&&m.steps;if(!st||!st.length||!a)return;
+  var d=m.dur,t=((a.time%d)+d)%d,n=st.length,k=-1;for(var i=0;i<n;i++)if(st[i]<=t)k=i;
+  var t0,t1,base;if(k<0){t0=st[n-1]-d;t1=st[0];base=-1;}else{t0=st[k];t1=k+1<n?st[k+1]:st[0]+d;base=k;}
+  var f=(base+(t-t0)/Math.max(.05,t1-t0))/n;   /* ciclos dentro del clip */
+  var c=f-((M.phf!=null)?M.phf:f);if(c<-.5)c+=1;if(c>.5)c-=1;M.phf=f;M.ph+=c*n*Math.PI;
+}
+
+/* ---------- el modo de cada cuadro ---------- */
+function zmcMode(z,M){
+  if(z.mvFrz>0||z.mvCry||z.mvZap)return 'frozen';
+  if(z.dead)return z.crawl||M.mode==='proc'&&!M.dead?'proc':'die';
+  if(z.crawl)return 'crawl';
+  if(z.land>0&&(M.mode==='rise'||M.mode==='climb'||M.landOk)){M.landOk=true;return 'loco';}   /* sale del hoyo o de la ventana ya de pie */
+  M.landOk=false;
+  if(z.drop>0||z.land>0||z.state==='tear')return 'proc';
+  if(z.rise>0)return 'rise';
+  if(z.state==='vault')return 'climb';
+  return 'loco';
+}
+function zmcStep(z,dt,moving,hitNew){
+  var M=z.zmc,g=z.g,s=g.scale.x||1;
+  /* velocidad real (anfitrion o cliente: lo mismo) */
+  var dx=g.position.x-M.px,dz=g.position.z-M.pz,d=Math.sqrt(dx*dx+dz*dz);M.px=g.position.x;M.pz=g.position.z;
+  if(d>.8*s)d=0;var vi=dt>0?d/dt:0;M.v+=(vi-M.v)*Math.min(1,dt*6);
+  var mode=zmcMode(z,M),prev=M.mode;M.mode=mode;
+  if(mode==='frozen')return 2;   /* congelado (maravilla): no se toca nada */
+  var wt=1,fade=.3;
+  if(mode==='proc')wt=0;
+  else if(mode==='die'){
+    if(!M.dead){M.dead=true;var dn=z.dv===0?'die_back':(z.dv===3?'die_face':'die_knees');if(!ZMC.clips[dn])dn='die_back';zmcPlay(M,dn,.18,true,0,1);}
+  }else if(mode==='rise'){
+    var sr=z.rp||0;wt=clamp((sr-.5)/.14,0,1);
+    var a=zmcAct(M,'rise');if(a&&M.curN!=='rise'){zmcPlay(M,'rise',0,true,0,0);}
+    if(a){a.timeScale=0;a.time=clamp((sr-.55)/.45,0,1)*zmcDur('rise');}
+  }else if(mode==='climb'){
+    var ac=M.curN==='climb'?M.cur:zmcPlay(M,'climb',.15,true,0,0);if(ac){ac.timeScale=0;ac.time=clamp(z.vp||0,0,1)*zmcDur('climb');}
+  }else if(mode==='crawl'){
+    var cts=clamp(M.v/(zmcSpeed('crawl')*s),.6,2.4);zmcPlay(M,'crawl',.35,false,M.t0*zmcDur('crawl'),moving?cts:.35);
+    if(z.cut&&(z.cut.lLh||z.cut.lRh))M.drop=.22;else M.drop=0;
+  }else{
+    /* golpe o ataque nuevo: una vez; despues vuelve a caminar */
+    var atk=z.atkA>M.pa+.001;
+    if(atk&&ZMC.ATK.length){var an=ZMC.ATK[Math.floor(M.R()*ZMC.ATK.length)%ZMC.ATK.length],am=ZMC.meta.clips[an];
+      zmcPlay(M,an,.12,true,Math.max(0,(am.strike||.3)-.14),1);M.end=am.dur-.22;M.one='atk';}
+    else if(hitNew&&ZMC.HIT.length&&M.one!=='atk'){var hn=ZMC.HIT[Math.floor(M.R()*ZMC.HIT.length)%ZMC.HIT.length];
+      zmcPlay(M,hn,.08,true,0,1);M.end=zmcDur(hn)-.25;M.one='hit';}
+    if(M.one&&(!M.cur||M.cur.time>=M.end||!M.cur.isRunning()))M.one=null;
+    if(!M.one){
+      var run=z.sp>=1.8,mv=moving&&M.v>.12*s,nm=mv?(run&&M.run?M.run:M.walk):'idle';
+      var ts=nm==='idle'?1:clamp(M.v/(zmcSpeed(nm)*s),.5,2.2);
+      if(M.curN!==nm)zmcPlay(M,nm,M.curN==='idle'||nm==='idle'?.35:.25,false,nm==='idle'?M.t0*zmcDur('idle'):0,ts);
+      else M.cur.timeScale=ts;
+    }
+  }
+  M.pa=z.atkA||0;
+  /* peso contra la procedural */
+  var k=Math.min(1,dt/.25);M.w+= (wt-M.w)*(mode==='rise'?1:k);if(Math.abs(M.w-wt)<.01)M.w=wt;
+  return M.w>0?1:0;
+}
+/* mirada al jugador encima del clip (como la capa de s_zanim2.js), estabilizada */
+function zmcLook(z,M,dt){
+  var lw=0,ly=0,lp=0;
+  if(M.mode==='loco'&&!M.one&&typeof za2Target==='function'&&!z.dead){var T=za2Target(z),g=z.g,s=g.scale.x||1;
+    if(T.ok&&T.d<18*s){var dx=T.x-g.position.x,dz=T.z-g.position.z;lw=clamp((18*s-T.d)/(7*s),0,1)*.8;
+      ly=clamp(Math.atan2(Math.sin(Math.atan2(dx,dz)-g.rotation.y),Math.cos(Math.atan2(dx,dz)-g.rotation.y)),-1,1);
+      lp=clamp(-Math.atan2(T.y-(g.position.y+1.6*s),Math.hypot(dx,dz)||1),-.5,.4);}}
+  M.yl+=(ly*lw-M.yl)*Math.min(1,dt*4);M.pl+=(lp*lw-M.pl)*Math.min(1,dt*3.5);
+  if(Math.abs(M.yl)+Math.abs(M.pl)<1e-3)return;
+  _zmcE.set(M.pl*.4,M.yl*.4,0);_zmcQ.setFromEuler(_zmcE);z.nk.quaternion.multiply(_zmcQ);
+  _zmcE.set(M.pl*.6,M.yl*.6,0);_zmcQ.setFromEuler(_zmcE);z.hg.quaternion.multiply(_zmcQ);
+}
+
+/* ---------- envoltura de animZombie (despues de s_zanim2.js) ---------- */
+if(typeof animZombie==='function'){var _zmcAZ=animZombie;
+  animZombie=function(z,dt,moving){
+    if(!ZMC.on||!ZMC.lib||!z||z.dog||z.boss||!z.zr)return _zmcAZ(z,dt,moving);
+    var M=z.zmc||zmcInit(z);if(!M)return _zmcAZ(z,dt,moving);
+    var t0=ZMC.prof?performance.now():0;
+    var stun0=M.ps,land0=z.land>0,hitNew=(z.stun||0)>stun0+.001&&!land0&&!z.dead;M.ps=z.stun||0;
+    /* mientras el clip manda del todo, debajo corre solo la animacion de siempre (estado, pasos, aterrizajes, muerte,
+       cadaver); la capa de s_zanim2.js (IK de pies) se salta: el clip ya trae los pies plantados */
+    var full=M.w>=1&&M.mode!=='proc'&&M.mode!=='frozen';
+    var r=full&&typeof _za2AZ==='function'?_za2AZ(z,dt,moving):_zmcAZ(z,dt,moving);
+    var on;
+    try{on=zmcStep(z,dt,moving,hitNew);}catch(e){if(!ZMC.err)ZMC.err=String(e&&e.stack||e);ZMC.on=false;return r;}
+    if(on===2)return r;
+    if(on){
+      /* LOD: lejos o fuera de pantalla el mezclador corre menos (siempre en cada cuadro en transiciones y golpes) */
+      var cam=typeof camera!=='undefined'?camera.position:null,g=z.g,s=g.scale.x||1,cd=cam?Math.hypot(cam.x-g.position.x,cam.z-g.position.z)/s:0;
+      var vis=z.cxVisual?z.cxVisual.root.visible:true,per=!vis?.1:(cd>ZMC.far?1/15:(cd>ZMC.near?1/30:0));
+      if(M.w<1||M.one||M.mode!=='loco'&&M.mode!=='crawl')per=0;
+      M.acc+=dt;
+      var wsave=M.w<1;if(wsave)zmcGrab(z,M.buf);
+      if(!M.has||M.acc+1e-6>=per){M.mx.update(M.acc);M.acc=0;zmcGrab(z,M.pose);M.has=true;ZMC.st.mx++;}
+      else{zmcPut(z,M.pose);ZMC.st.skip++;}
+      if(M.drop)z.hip.position.y-=M.drop;
+      if(wsave)zmcMix(z,M.buf,M.w);
+      /* el cuerpo (pivote de la caida procedural) queda quieto: el clip ya trae la caida */
+      var b=z.body;if(M.w>=1){if(b.rotation._x||b.rotation._y||b.rotation._z)b.rotation.set(0,0,0);if(b.position.x||b.position.y||b.position.z)b.position.set(0,0,0);}
+      else{b.rotation.set(b.rotation.x*(1-M.w),b.rotation.y*(1-M.w),b.rotation.z*(1-M.w));b.position.multiplyScalar(1-M.w);}
+      zmcLook(z,M,dt);
+      if(M.mode==='loco'&&!M.one&&M.cur&&M.curN!=='idle'){zmcPhase(M,M.cur,M.curN);z.ph=M.ph;}else M.ph=z.ph;
+      if(typeof za2Compose==='function')za2Compose(z);
+    }else if(full===false&&M.has){M.has=false;}
+    ZMC.st.n++;if(ZMC.prof)ZMC.st.ms+=performance.now()-t0;
+    return r;
+  };}
+(function(){var p=zmcLoad();if(p&&window.ASSETS&&typeof ASSETS.track==='function')ASSETS.track(p,'Movimiento de los zombis');})();
+/* =====================================================
    EL PRIMERO CON ESQUELETO (v21, s_primero.js): el gigante de la Camara Cero sobre la pelea de s_cero.js
    - models/primero.glb ahora es UNA malla continua con pesos de piel (bl/primero.py): 22 huesos del cuerpo de traslacion pura
      (rotacion de reposo = identidad en los ejes del modelo: -X adelante, +Y arriba, +Z su izquierda), 32 huesos de cadena,
@@ -35175,10 +35377,103 @@ function cxZVisualFrame(dt){if(cxZVisual.tick)cxZVisual.tick(dt);}
     try{new THREE.GLTFLoader().load('models/zombies/'+kind+'.glb',function(gl){
       try{cxZVisual.templates[kind]=cxZPrepare(gl.scene);if(typeof zombies!=='undefined')zombies.forEach(cxZInstall);}
       catch(e){cxZVisual.failures[kind]=String(e&&e.message||e);}resolve();
-    },null,function(){cxZVisual.failures[kind]='asset unavailable';resolve();});}
+    },null,function(){
+      /* v23: si el modelo nuevo no carga, el de la v22 (models/zombies/<kind>_v22.glb) y si tampoco, el procedural */
+      if(kind==='technician'||kind==='guard')new THREE.GLTFLoader().load('models/zombies/'+kind+'_v22.glb',function(g2){
+        try{cxZVisual.templates[kind]=cxZPrepare(g2.scene);if(typeof zombies!=='undefined')zombies.forEach(cxZInstall);}catch(e){cxZVisual.failures[kind]=String(e&&e.message||e);}resolve();
+      },null,function(){cxZVisual.failures[kind]='asset unavailable';resolve();});
+      else{cxZVisual.failures[kind]='asset unavailable';resolve();}});}
     catch(e){cxZVisual.failures[kind]=String(e&&e.message||e);resolve();}
   });});
   if(window.ASSETS&&typeof ASSETS.track==='function')ASSETS.track(Promise.all(cxZLoads),'Personal de Selene');
+})();
+/* =====================================================
+   ZOMBIS v23: VARIANTES DE LOS MODELOS DE TECNICO Y GUARDIA (bl/zombies/zm_*.py)
+   - Los GLB nuevos traen en el nodo z_model el extra cxZModel {kind, acc, variants, mask} y en cada vertice el atributo
+     _ACC (0 = siempre; k = accesorio k de la lista). Cada zombi toma una de 3 variantes segun su id de red (igual en todos
+     los clientes del cooperativo, cero datos nuevos en la red): accesorios visibles (casco, gorra, rodilleras, guantes,
+     cristales de Eclipsio...), tinte de la tela, sangre extra y color de pelo con la mascara <kind>_mask.png / _hmask.jpg.
+   - Barato: un material por tipo y variante (compartido por toda la horda, mismo programa de sombreado); un accesorio
+     apagado se descarta en el vertice (sin discard en el pixel).
+   - Piezas arrancadas (s_fisica.js fisBake): llevan el mismo material de su variante sin piel y los accesorios apagados
+     fuera; si algo falta, queda el material del GLB (todos los accesorios a la vista).
+   - Sin GLB nuevo (cxZModel ausente) no hace nada. ZM.on=false lo apaga.
+===================================================== */
+var ZM={on:true,mats:{},masks:{},applied:0,err:null,
+  /* tinte de la tela (multiplica el color en la mascara R), sangre extra (mascara G) y pelo (mascara B) por variante */
+  look:{technician:[{t:[1,1,1],b:.15,h:[1,1,1]},{t:[.86,.92,1.08],b:.85,h:[1.6,1.45,1.3]},{t:[1.12,1.02,.74],b:.4,h:[.7,.7,.75]}],
+        guard:[{t:[1,1,1],b:.2,h:[1,1,1]},{t:[1.25,1.22,1.12],b:.55,h:[1.8,1.6,1.4]},{t:[.82,.86,.8],b:.9,h:[.6,.6,.62]}]}};
+function zmMeta(tpl){
+  if(!tpl||tpl.zm!==undefined)return tpl&&tpl.zm;tpl.zm=null;
+  tpl.root.traverse(function(o){var s=o.userData&&o.userData.cxZModel;if(s&&!tpl.zm){try{tpl.zm=typeof s==='string'?JSON.parse(s):s;}catch(e){}}});
+  return tpl.zm;
+}
+function zmMask(url){
+  if(!ZM.masks[url]){var t=new THREE.TextureLoader().load(url);t.flipY=false;t.encoding=THREE.LinearEncoding;ZM.masks[url]=t;}
+  return ZM.masks[url];
+}
+/* material de una variante: clon del del GLB con el corte de accesorios y la mascara */
+function zmMat(src,key,bits,look,maskUrl,skin){
+  var k=key+(skin?'':'|fis');if(ZM.mats[k])return ZM.mats[k];
+  var m=src.clone();m.skinning=!!skin;m.vertexTangents=false;
+  var U={uAcc:{value:bits},uTint:{value:new THREE.Vector3().fromArray(look.t)},uBlood:{value:look.b},uHair:{value:new THREE.Vector3().fromArray(look.h)},
+    uMask:{value:maskUrl?zmMask(maskUrl):null}};
+  m.userData.zmU=U;
+  m.onBeforeCompile=function(sh){
+    for(var n in U)sh.uniforms[n]=U[n];
+    sh.vertexShader='attribute float _acc;\nuniform float uAcc;\n'+sh.vertexShader.replace('#include <fog_vertex>',
+      '#include <fog_vertex>\n if(_acc>.5){float zb=exp2(floor(_acc+.5)-1.);if(mod(floor(uAcc/zb+.001),2.)<.5)gl_Position=vec4(2.,2.,2.,1.);}');
+    if(U.uMask.value)sh.fragmentShader='uniform sampler2D uMask;\nuniform vec3 uTint;\nuniform float uBlood;\nuniform vec3 uHair;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n#ifdef USE_UV\n{vec3 zk=texture2D(uMask,vUv).rgb;diffuseColor.rgb=mix(diffuseColor.rgb,clamp(diffuseColor.rgb*uTint,0.,1.),zk.r);'+
+      'diffuseColor.rgb=mix(diffuseColor.rgb,clamp(diffuseColor.rgb*uHair,0.,1.),zk.b);diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.14,.018,.014),clamp(zk.g*uBlood,0.,1.));}\n#endif');
+  };
+  m.customProgramCacheKey=function(){return 'zm23'+(U.uMask.value?'m':'')+(skin?'s':'');};
+  ZM.mats[k]=m;return m;
+}
+function zmVariant(z){var id=z.nid!=null?z.nid:(z.zmRnd!=null?z.zmRnd:(z.zmRnd=(Math.random()*997)|0));return ((Math.imul(id+7,2654435761)>>>8)%3+3)%3;}
+function zmSetup(z){
+  var v=z.cxVisual,tpl=v&&cxZVisual.templates[v.kind],meta=zmMeta(tpl);z.zmDone=true;if(!meta)return;
+  var vi=zmVariant(z),bits=0,look=(ZM.look[meta.kind]||ZM.look.technician)[vi];
+  (meta.variants[vi]||[]).forEach(function(a){bits+=Math.pow(2,a-1);});
+  z.zmV={i:vi,bits:bits,look:look,kind:meta.kind};
+  v.root.traverse(function(o){
+    if(!o.isSkinnedMesh||o.name==='z_eyes')return;
+    var mu=o.name==='z_head'?'models/zombies/'+meta.kind+'_hmask.jpg':meta.mask;
+    o.material=zmMat(o.material,meta.kind+'|'+vi+'|'+o.name,bits,look,mu,true);
+  });
+  ZM.applied++;
+}
+(function(){
+  if(typeof cxZVisual==='undefined'||!cxZVisual.tick)return;
+  var tick0=cxZVisual.tick;
+  cxZVisual.tick=function(dt){
+    if(ZM.on&&typeof zombies!=='undefined'){
+      for(var i=0;i<zombies.length;i++){var z=zombies[i];if(z.cxVisual&&!z.zmDone){try{zmSetup(z);}catch(e){z.zmDone=true;ZM.err=String(e&&e.message||e);}}}
+    }
+    return tick0.apply(this,arguments);
+  };
+  /* piezas arrancadas: material de la variante sin piel y accesorios apagados fuera (atributo _acc copiado del molde) */
+  if(typeof fisBake==='function'){
+    var fb0=fisBake;
+    fisBake=function(z,root,bones){
+      var out=fb0.apply(this,arguments);
+      try{
+        var v=z&&z.cxVisual,zv=z&&z.zmV,tpl=v&&cxZVisual.templates[v.kind];
+        if(!out||!zv||!tpl||!tpl.fisMeshes)return out;
+        var k=0;
+        tpl.fisMeshes.forEach(function(mesh){
+          if(mesh.name==='z_head'&&bones.indexOf('hg')<0)return;
+          var sub=FIS_BK[v.kind+'|'+mesh.name+'|'+bones.join(',')];if(!sub||!sub.tri.length)return;
+          var o=out[k++];if(!o)return;
+          var A=mesh.geometry.attributes._acc;
+          if(A){var a=new Float32Array(sub.verts.length);for(var q=0;q<a.length;q++)a[q]=A.getX(sub.verts[q]);o.geometry.setAttribute('_acc',new THREE.BufferAttribute(a,1));}
+          var mu=mesh.name==='z_head'?'models/zombies/'+zv.kind+'_hmask.jpg':zmMeta(tpl).mask;
+          o.material=zmMat(mesh.material,zv.kind+'|'+zv.i+'|'+mesh.name,zv.bits,zv.look,mu,false);
+        });
+      }catch(e){ZM.err=String(e&&e.message||e);}
+      return out;
+    };
+  }
 })();
 /* =====================================================
    ARMAS MARAVILLA (v21) — que se vean y suenen a maravilla de verdad

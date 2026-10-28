@@ -6,9 +6,9 @@
   "rough": 0.384,
   "metal": 0.891,
   "tint": [
-   0.369,
-   0.402,
-   0.436
+   0.39,
+   0.423,
+   0.452
   ]
  },
  "wk_steel_park": {
@@ -18,9 +18,9 @@
   "rough": 0.695,
   "metal": 0.566,
   "tint": [
-   0.796,
-   0.751,
-   0.821
+   0.563,
+   0.573,
+   0.594
   ]
  },
  "wk_steel_bare": {
@@ -51,7 +51,7 @@
   "c": "wk_wood_c.jpg",
   "n": "wk_wood_n.jpg",
   "orm": "wk_wood_orm.jpg",
-  "rough": 0.478,
+  "rough": 0.352,
   "metal": 0.008,
   "tint": [
    1.0,
